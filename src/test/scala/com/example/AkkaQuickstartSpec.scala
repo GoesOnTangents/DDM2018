@@ -1,12 +1,12 @@
 //#full-example
-package com.example
+/*package com.example
 
 import org.scalatest.{ BeforeAndAfterAll, WordSpecLike, Matchers }
 import akka.actor.ActorSystem
 import akka.testkit.{ TestKit, TestProbe }
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import Greeter._
+import PasswordWorker._
 import Printer._
 
 //#test-classes
@@ -30,7 +30,7 @@ class AkkaQuickstartSpec(_system: ActorSystem)
       //#specification-example
       val testProbe = TestProbe()
       val helloGreetingMessage = "hello"
-      val helloGreeter = system.actorOf(Greeter.props(helloGreetingMessage, testProbe.ref))
+      val helloGreeter = system.actorOf(Worker.props(helloGreetingMessage, testProbe.ref))
       val greetPerson = "Akka"
       helloGreeter ! WhoToGreet(greetPerson)
       helloGreeter ! Greet
@@ -40,3 +40,4 @@ class AkkaQuickstartSpec(_system: ActorSystem)
   //#first-test
 }
 //#full-example
+*/
