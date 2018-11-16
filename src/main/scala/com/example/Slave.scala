@@ -68,8 +68,10 @@ class Printer extends Actor with ActorLogging {
 }
 
 //#printer-actor
+object Slave {
 
-object Slave extends App {
+}
+class Slave extends Actor {
   import scala.util.control.Breaks._
   val system: ActorSystem = ActorSystem("SlaveSystem")
 

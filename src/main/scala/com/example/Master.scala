@@ -7,41 +7,44 @@ import com.example.PasswordWorker.Start
 import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
 
-//#greeter-companion
-//#greeter-messages
-object PasswordWorker {
-  //#greeter-messages
+object MasterActor {
   final val props: Props = Props(new PasswordWorker())
-  //#greeter-messages
-  final case class Start(data: BufferedSource, i: Int, j: Int)
+  final case class Read()
+  final case class CrackPasswords()
+  final case class SlaveSubscription()
   //###case object Greet
 }
-//#greeter-messages
-//#greeter-companion
 
-//#greeter-actor
-class PasswordWorker() extends Actor {
-  import PasswordWorker._
-  import Printer._
+class MasterActor() extends Actor {
+  import MasterActor._
 
   var data : BufferedSource = null
+  var maximumSlaveAmount : Int = 1
+  var slaves: Array[ActorRef]
 
-  def crackPasswordsInRange(i: Int, j: Int) = {
-    breakable {
-      for (line <- students.getLines) {
-        if (line == "") break
-        val cols = line.split(";").map(_.trim)
-        // do whatever you want with the columns here
-        println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
-      }
-    }
+  def read(): Unit = {
+    this.data = io.Source.fromFile("students.csv")
   }
 
+  def delegatePasswordCracking(): Unit = {
+    var range = 1000000/slaves.size
+    var i = 0,
+    var j = 0 + range
+    for (s <- slaves) {
+      s ! CrackPasswordsInRange(this.data, i, j)
+      i += range
+      j += range
+    }
+
+  }
 
   def receive = {
-    case Start(data,i,j) =>
-      this.data = data
-      this.crackPasswordsInRange(i,j)
+    case CrackPasswords =>
+      this.delegatePasswordCracking()
+    case Read =>
+      this.read()
+    case SlaveSubscription =>
+      this.slaves = this.slaves :+ this.sender()
     }
 }
 //#greeter-actor
