@@ -2,8 +2,8 @@
 package com.example
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
-import com.example.Master.students
-import com.example.PasswordWorker.Start
+import com.example.MasterActor.{Read}
+
 import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
 
@@ -19,7 +19,7 @@ class MasterActor() extends Actor {
   import MasterActor._
 
   var data : BufferedSource = null
-  var maximumSlaveAmount : Int = 1
+  var expectedSlaveAmount : Int = 1
   var slaves: Array[ActorRef]
 
   def read(): Unit = {
@@ -45,6 +45,7 @@ class MasterActor() extends Actor {
       this.read()
     case SlaveSubscription =>
       this.slaves = this.slaves :+ this.sender()
+      if (slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
     }
 }
 //#greeter-actor
@@ -73,14 +74,11 @@ class Printer extends Actor with ActorLogging {
 //#printer-actor
 
 object Master extends App {
-  import scala.util.control.Breaks._
-  val students = io.Source.fromFile("students.csv")
-  val system: ActorSystem = ActorSystem("ExerciseSystem")
+  val system: ActorSystem = ActorSystem("MasterSystem")
 
-  //#create-actors
-  // Create the printer actor
-  val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerActor")
-  passwordworker ! Start(students,0,42)
+  val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
+  masterActor ! Read()
+
 }
 
 

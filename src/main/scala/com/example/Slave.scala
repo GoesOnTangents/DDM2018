@@ -4,6 +4,8 @@ package com.example
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 import com.example.Master.students
 import com.example.PasswordWorker.Start
+import com.example.Slave.CrackPasswordsInRange
+
 import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
 
@@ -44,95 +46,17 @@ class PasswordWorker() extends Actor {
       this.crackPasswordsInRange(i,j)
     }
 }
-//#greeter-actor
 
-//#printer-companion
-//#printer-messages
-object Printer {
-  //#printer-messages
-  def props: Props = Props[Printer]
-  //#printer-messages
-  final case class Greeting(greeting: String)
+object Slave {
+  final case class CrackPasswordsInRange()
 }
-//#printer-messages
-//#printer-companion
-
-//#printer-actor
-class Printer extends Actor with ActorLogging {
-  import Printer._
+class Slave extends Actor {
+  val system: ActorSystem = ActorSystem("SlaveSystem")
+  val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
   def receive = {
-    case Greeting(greeting) =>
-      log.info("Greeting received (from " + sender() + "): " + greeting)
+    case CrackPasswordsInRange(data,i,j) =>
+      this.passwordworker ! Start(data,i,j)
   }
 }
 
-//#printer-actor
-object Slave {
-
-}
-class Slave extends Actor {
-  import scala.util.control.Breaks._
-  val system: ActorSystem = ActorSystem("SlaveSystem")
-
-  //#create-actors
-  // Create the printer actor
-  val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
-  passwordworker ! Start(students,0,42)
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//#main-class
-/*object AkkaQuickstart extends App {
-  import Greeter._
-
-  // Create the 'helloAkka' actor system
-  val system: ActorSystem = ActorSystem("helloAkka")
-
-  //#create-actors
-  // Create the printer actor
-  val printer: ActorRef = system.actorOf(Printer.props, "printerActor")
-
-  // Create the 'greeter' actors
-  val howdyGreeter: ActorRef =
-    system.actorOf(Greeter.props("Howdy", printer), "howdyGreeter")
-  val helloGreeter: ActorRef =
-    system.actorOf(Greeter.props("Hello", printer), "helloGreeter")
-  val goodDayGreeter: ActorRef =
-    system.actorOf(Greeter.props("Good day", printer), "goodDayGreeter")
-  //#create-actors
-
-  //#main-send-messages
-  howdyGreeter ! WhoToGreet("Akka")
-  howdyGreeter ! Greet
-
-  howdyGreeter ! WhoToGreet("Lightbend")
-  howdyGreeter ! Greet
-
-  helloGreeter ! WhoToGreet("Scala")
-  helloGreeter ! Greet
-
-  goodDayGreeter ! WhoToGreet("Play")
-  goodDayGreeter ! Greet
-  //#main-send-messages
-}
-//#main-class
-*/
-//#full-example
