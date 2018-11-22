@@ -43,7 +43,7 @@ class MasterActor extends Actor {
 
   }
 
-  def receive: Receive = {
+  override def receive: Receive = {
     case CrackPasswords =>
       this.delegatePasswordCracking()
     case Read =>
