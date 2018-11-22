@@ -2,9 +2,9 @@
 package com.example
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
-import com.example.Master.students
+import com.example.MasterActor.SlaveSubscription
 import com.example.PasswordWorker.Start
-import com.example.Slave.CrackPasswordsInRange
+import com.example.SlaveActor.{CrackPasswordsInRange, Subscribe}
 
 import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
@@ -29,14 +29,14 @@ class PasswordWorker() extends Actor {
   var data : BufferedSource = null
 
   def crackPasswordsInRange(i: Int, j: Int) = {
-    breakable {
+    /*breakable {
       for (line <- students.getLines) {
         if (line == "") break
         val cols = line.split(";").map(_.trim)
         // do whatever you want with the columns here
         println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
       }
-    }
+    }*/
   }
 
 
@@ -47,16 +47,34 @@ class PasswordWorker() extends Actor {
     }
 }
 
-object Slave {
-  final case class CrackPasswordsInRange()
+object SlaveActor {
+  final case class CrackPasswordsInRange(bufferedSource: BufferedSource, i: Int, j: Int)
+  final val props: Props = Props(new SlaveActor())
+  final case class Subscribe(addr: String)
 }
-class Slave extends Actor {
+
+class SlaveActor extends Actor {
   val system: ActorSystem = ActorSystem("SlaveSystem")
   val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
   def receive = {
     case CrackPasswordsInRange(data,i,j) =>
       this.passwordworker ! Start(data,i,j)
+    case Subscribe(addr) =>
+      this.Subscribe(addr)
   }
+
+  def Subscribe(addr: String) = {
+    val selection = context.actorSelection(addr)
+    selection ! SlaveSubscription()
+  }
+}
+
+object Slave extends App {
+  val system: ActorSystem = ActorSystem("SlaveSystem")
+  val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
+  val addr: String = "akka.tcp://MasterSystem@127.0.0.1:0/user/MasterActor"
+  slaveActor ! Subscribe(addr)
+
 }
 

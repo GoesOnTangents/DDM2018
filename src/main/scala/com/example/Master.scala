@@ -8,29 +8,31 @@ import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
 
 object MasterActor {
-  final val props: Props = Props(new PasswordWorker())
+  final val props: Props = Props(new MasterActor())
   final case class Read()
   final case class CrackPasswords()
+  final case class CrackPasswordsInRange(bufferedSource: BufferedSource, i: Int, j: Int)
   final case class SlaveSubscription()
+
   //###case object Greet
 }
 
-class MasterActor() extends Actor {
+class MasterActor extends Actor {
   import MasterActor._
 
   var data : BufferedSource = null
   var expectedSlaveAmount : Int = 1
-  var slaves: Array[ActorRef]
+  var slaves: Array[ActorRef] = Array()
 
   def read(): Unit = {
-    this.data = io.Source.fromFile("students.csv")
+    this.data = scala.io.Source.fromFile("students.csv")
   }
 
   def delegatePasswordCracking(): Unit = {
-    var range = 1000000/slaves.size
-    var i = 0,
+    var range = 1000000/this.slaves.size
+    var i = 0
     var j = 0 + range
-    for (s <- slaves) {
+    for (s <- this.slaves) {
       s ! CrackPasswordsInRange(this.data, i, j)
       i += range
       j += range
@@ -45,7 +47,7 @@ class MasterActor() extends Actor {
       this.read()
     case SlaveSubscription =>
       this.slaves = this.slaves :+ this.sender()
-      if (slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
+      if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
     }
 }
 //#greeter-actor
