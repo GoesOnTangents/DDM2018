@@ -1,8 +1,11 @@
 //#full-example
 package com.example
 
+import java.io.File
+
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.{Read}
+import com.example.MasterActor.Read
+import com.typesafe.config.ConfigFactory
 
 import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
@@ -40,7 +43,7 @@ class MasterActor extends Actor {
 
   }
 
-  def receive = {
+  def receive: Receive = {
     case CrackPasswords =>
       this.delegatePasswordCracking()
     case Read =>
@@ -48,6 +51,7 @@ class MasterActor extends Actor {
     case SlaveSubscription =>
       this.slaves = this.slaves :+ this.sender()
       if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
+      println(s"SlaveRegistered here $this.slaves")
     }
 }
 //#greeter-actor
@@ -67,7 +71,7 @@ object Printer {
 class Printer extends Actor with ActorLogging {
   import Printer._
 
-  def receive = {
+  def receive: Receive = {
     case Greeting(greeting) =>
       log.info("Greeting received (from " + sender() + "): " + greeting)
   }
@@ -76,10 +80,15 @@ class Printer extends Actor with ActorLogging {
 //#printer-actor
 
 object Master extends App {
-  val system: ActorSystem = ActorSystem("MasterSystem")
+  //val configFile = scala.io.Source("remote_application.conf").fromFile
+
+  val config = ConfigFactory.parseFile(new File("remote_application.conf"))
+
+  val system: ActorSystem = ActorSystem("MasterSystem", config)
 
   val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
   masterActor ! Read()
+
 
 }
 

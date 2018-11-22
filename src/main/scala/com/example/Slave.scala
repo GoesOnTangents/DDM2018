@@ -40,7 +40,7 @@ class PasswordWorker() extends Actor {
   }
 
 
-  def receive = {
+  def receive: Receive = {
     case Start(data,i,j) =>
       this.data = data
       this.crackPasswordsInRange(i,j)
@@ -57,7 +57,7 @@ class SlaveActor extends Actor {
   val system: ActorSystem = ActorSystem("SlaveSystem")
   val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
-  def receive = {
+  def receive: Receive = {
     case CrackPasswordsInRange(data,i,j) =>
       this.passwordworker ! Start(data,i,j)
     case Subscribe(addr) =>
@@ -73,7 +73,7 @@ class SlaveActor extends Actor {
 object Slave extends App {
   val system: ActorSystem = ActorSystem("SlaveSystem")
   val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
-  val addr: String = "akka.tcp://MasterSystem@127.0.0.1:0/user/MasterActor"
+  val addr: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
   slaveActor ! Subscribe(addr)
 
 }
