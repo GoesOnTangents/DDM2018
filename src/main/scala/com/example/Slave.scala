@@ -1,10 +1,13 @@
 //#full-example
 package com.example
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
+import java.io.File
+
+import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSystem, Props}
 import com.example.MasterActor.SlaveSubscription
 import com.example.PasswordWorker.Start
 import com.example.SlaveActor.{CrackPasswordsInRange, Subscribe}
+import com.typesafe.config.ConfigFactory
 
 import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
@@ -57,7 +60,7 @@ class SlaveActor extends Actor {
   val system: ActorSystem = ActorSystem("SlaveSystem")
   val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
-  def receive: Receive = {
+  override def receive: Receive = {
     case CrackPasswordsInRange(data,i,j) =>
       this.passwordworker ! Start(data,i,j)
     case Subscribe(addr) =>
@@ -66,12 +69,13 @@ class SlaveActor extends Actor {
 
   def Subscribe(addr: String) = {
     val selection = context.actorSelection(addr)
-    selection ! SlaveSubscription()
+    selection ! SlaveSubscription
   }
 }
 
 object Slave extends App {
-  val system: ActorSystem = ActorSystem("SlaveSystem")
+  val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("SlaveSystem")
+  val system: ActorSystem = ActorSystem("SlaveSystem", config)
   val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
   val addr: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
   slaveActor ! Subscribe(addr)

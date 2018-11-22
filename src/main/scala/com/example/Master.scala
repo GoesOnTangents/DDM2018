@@ -12,10 +12,10 @@ import scala.util.control.Breaks.{break, breakable}
 
 object MasterActor {
   final val props: Props = Props(new MasterActor())
-  final case class Read()
-  final case class CrackPasswords()
+  case object Read
+  case object CrackPasswords
   final case class CrackPasswordsInRange(bufferedSource: BufferedSource, i: Int, j: Int)
-  final case class SlaveSubscription()
+  case object SlaveSubscription
 
   //###case object Greet
 }
@@ -42,16 +42,20 @@ class MasterActor extends Actor {
     }
 
   }
+  def subscribeSlaves(): Unit = {
+    this.slaves = this.slaves :+ this.sender()
+    if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
+    println(s"Current master's slaves: $this.slaves")
+  }
 
   override def receive: Receive = {
+    case SlaveSubscription =>
+      this.subscribeSlaves()
     case CrackPasswords =>
       this.delegatePasswordCracking()
     case Read =>
       this.read()
-    case SlaveSubscription =>
-      this.slaves = this.slaves :+ this.sender()
-      if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
-      println(s"SlaveRegistered here $this.slaves")
+
     }
 }
 //#greeter-actor
@@ -80,9 +84,7 @@ class Printer extends Actor with ActorLogging {
 //#printer-actor
 
 object Master extends App {
-  //val configFile = scala.io.Source("remote_application.conf").fromFile
-
-  val config = ConfigFactory.parseFile(new File("remote_application.conf"))
+  val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("MasterSystem")
 
   val system: ActorSystem = ActorSystem("MasterSystem", config)
 
