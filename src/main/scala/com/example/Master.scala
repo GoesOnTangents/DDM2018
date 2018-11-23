@@ -1,8 +1,9 @@
 package com.example
 
 import java.io.File
+
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.Read
+import com.example.MasterActor.{CrackPasswords, Read, SlaveSubscription}
 import com.example.SlaveActor.CrackPasswordsInRange
 import com.typesafe.config.ConfigFactory
 
@@ -14,22 +15,23 @@ object MasterActor {
   case object Read
   case object CrackPasswords
   case object SlaveSubscription
+  case object PasswordFound
   final case class PasswordFound(index: Int, password: Int)
 }
 
 class MasterActor extends Actor {
-  import MasterActor._
 
-  var data : BufferedSource = null
-  var expectedSlaveAmount : Int = 2
+  import MasterActor._
+  var data: BufferedSource = null
+  var expectedSlaveAmount: Int = 2
   var slaves: Array[ActorRef] = Array()
 
-  var names : Array[String] = Array()
-  var hashes : Array[String] = Array()
-  var gene : Array[String] = Array()
+  var names: Array[String] = Array()
+  var hashes: Array[String] = Array()
+  var gene: Array[String] = Array()
 
   //results
-  var cracked_passwords : Array[Int] = Array() //TODO: Initialize to size of csv
+  var cracked_passwords: Array[Int] = Array() //TODO: Initialize to size of csv
   var lcs_index: Array[Int] = Array()
   var linear_combination: Array[Boolean] = Array()
   var partner_hashes: Array[String] = Array()
@@ -49,9 +51,21 @@ class MasterActor extends Actor {
     }
   }
 
+  override def receive: Receive = {
+    case SlaveSubscription =>
+      this.subscribeSlaves()
+    case CrackPasswords =>
+      this.delegatePasswordCracking()
+    case PasswordFound(id, password) =>
+      this.storePassword(id, password)
+    case Read =>
+      this.read()
+
+  }
+
   def delegatePasswordCracking(): Unit = {
     println("Delegating Passwords to Crack.")
-    var range_per_slave = 1000000/this.slaves.size
+    var range_per_slave = 1000000 / this.slaves.size
     var i = 0
     var j = 0 + range_per_slave
     for (s <- this.slaves) {
@@ -61,17 +75,19 @@ class MasterActor extends Actor {
     }
 
   }
+
   def subscribeSlaves(): Unit = {
     this.slaves = this.slaves :+ this.sender()
     if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
     println(s"Current master's slaves: $this.slaves")
   }
+
   def storePassword(id: Int, password: Int): Unit = {
     //TODO: Store password at index
     //TODO: IF all passwords => find_lcs_partners()
   }
 
-  def findLcsPartners(): Unit ={
+  def findLcsPartners(): Unit = {
     //TODO: Step 1: Give slaves genes
     //Step 2: Make threadsafe Index and start distributing one name per slaves.
   }
@@ -94,6 +110,7 @@ class MasterActor extends Actor {
     // Give slaves names
     // Distribute new names when finished...
   }
+}
 
 object Printer {
   def props: Props = Props[Printer]
@@ -109,14 +126,15 @@ class Printer extends Actor with ActorLogging {
 }
 
 object Master extends App {
+    if (args.length == 0) {
+      println("dude, i need at least one parameter")
+    }
   val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("MasterSystem")
 
   val system: ActorSystem = ActorSystem("MasterSystem", config)
 
   val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
   masterActor ! Read
-
-
 }
 
 

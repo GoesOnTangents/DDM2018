@@ -31,16 +31,15 @@ object SlaveActor {
   final case class CrackPasswordsInRange(passwords: Array[String], i: Int, j: Int)
   final val props: Props = Props(new SlaveActor())
   final case class Subscribe(addr: String)
-  final case class
 }
 
 class SlaveActor extends Actor {
   val system: ActorSystem = ActorSystem("SlaveSystem")
-  val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
+  val passwordWorker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
   override def receive: Receive = {
     case CrackPasswordsInRange(passwords,i,j) =>
-      this.passwordworker ! Start(passwords,i,j) //TODO: delegate work
+      this.passwordWorker ! Start(passwords,i,j) //TODO: delegate work
     case Subscribe(addr) =>
       this.Subscribe(addr)
   }
