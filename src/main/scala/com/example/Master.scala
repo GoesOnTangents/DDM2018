@@ -23,7 +23,7 @@ object MasterActor {
 class MasterActor extends Actor {
 
   import MasterActor._
-  var expectedSlaveAmount: Int = 3
+  var expectedSlaveAmount: Int = 2
   var slaves: Array[ActorRef] = Array()
 
   var names: Array[String] = Array()
@@ -95,7 +95,7 @@ class MasterActor extends Actor {
   }
 
   def store_password(id: Int, password: Int): Unit = {
-    println(".")
+    print(".")
     cracked_passwords(id) = password
     num_cracked_passwords += 1
 

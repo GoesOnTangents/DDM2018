@@ -76,6 +76,7 @@ class LinearCombinationWorker extends Actor {
 object PasswordWorker {
   final val props: Props = Props(new PasswordWorker())
   final case class Start(passwords: Array[String], i: Int, j: Int)
+  final case class Setup(masterAddress: String)
 
   //all values inclusive
   def range_split(min: Int, max: Int, num_batches: Int): Vector[Tuple2[Int,Int]] = {
@@ -95,13 +96,15 @@ object PasswordWorker {
 
     result
   }
+
 }
 class PasswordWorker() extends Actor {
   import PasswordWorker._
 
+  //default
+  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
   def crack_passwords_in_range(passwords: Array[String], i: Int, j: Int) : Unit = {
-    val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
-    val masterActor = context.actorSelection(masterActorAddress)
+    val masterActor = context.actorSelection(this.masterActorAddress)
     println(s"$this has started to go through passwords from $i to $j")
     //fancy cracking functionality
     //send each password
@@ -121,6 +124,9 @@ class PasswordWorker() extends Actor {
     }
     context.stop(self)
   }
+  def setup(masterAddress: String): Unit ={
+    this.masterActorAddress = masterAddress
+  }
 
   def hash(s: String): String = {
     val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
@@ -128,8 +134,10 @@ class PasswordWorker() extends Actor {
   }
 
   override def receive: Receive = {
-    case Start(passwords,i,j) =>
+    case Start(passwords, i, j) =>
       this.crack_passwords_in_range(passwords,i,j)
+    case Setup(masterAddress) =>
+      this.setup(masterAddress)
   }
 }
 
@@ -144,6 +152,7 @@ object SlaveActor {
 
 class SlaveActor extends Actor {
   import SlaveActor._
+  var masterActorAddress: String = ""
 
   override def receive: Receive = {
     case Subscribe(addr) =>
@@ -154,18 +163,20 @@ class SlaveActor extends Actor {
       this.start_linear_combination_workers(passwords, i, j, sum)
   }
 
-  def subscribe(addr: String) : Unit = {
+  def subscribe(addr: String) = {
+    this.masterActorAddress = addr
     val selection = context.actorSelection(addr)
     selection ! SlaveSubscription
   }
 
   def start_password_workers(passwords: Array[String], min: Int, max: Int): Unit = {
-    import PasswordWorker.Start
+    import PasswordWorker.{Start,Setup}
 
 
     val ranges = PasswordWorker.range_split(min, max, num_local_workers)
     for (i <- ranges.indices) {
       val worker = context.actorOf(PasswordWorker.props, "PasswordCrackerWorker" + i)
+      worker ! Setup(this.masterActorAddress)
       worker ! Start(passwords, ranges(i)._1,ranges(i)._2)
     }
   }
