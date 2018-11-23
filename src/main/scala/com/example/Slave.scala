@@ -11,18 +11,21 @@ import com.typesafe.config.ConfigFactory
 object PasswordWorker {
   final val props: Props = Props(new PasswordWorker())
   final case class Start(passwords: Array[String], i: Int, j: Int)
+  final case class Setup(masterAddress: String)
 }
 class PasswordWorker() extends Actor {
   import PasswordWorker._
 
+  //default
+  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+
   def crackPasswordsInRange(passwords: Array[String], i: Int, j: Int) = {
-    val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
-    val masterActor = context.actorSelection(masterActorAddress)
+    val masterActor = context.actorSelection(this.masterActorAddress)
     println(s"$this has started to go through passwords from $i to $j")
     //fancy cracking functionality
     //send each password
 
-    var id  = 0;
+    var id  = 0
     for (password <- i until j){
       val hashed_password = hash(password.toString);
       //println(s"${hashed_password}")
@@ -37,6 +40,9 @@ class PasswordWorker() extends Actor {
     }
     println("range completed")
   }
+  def setup(masterAddress: String): Unit ={
+    this.masterActorAddress = masterAddress
+  }
 
   def hash(s: String): String = {
     val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
@@ -44,9 +50,11 @@ class PasswordWorker() extends Actor {
   }
 
   override def receive: Receive = {
-    case Start(passwords,i,j) =>
-      this.crackPasswordsInRange(passwords,i,j)
-    }
+    case Start(passwords, i, j) =>
+      this.crackPasswordsInRange(passwords, i, j)
+    case Setup(masterAddress) =>
+      this.setup(masterAddress)
+  }
 }
 
 object SlaveActor {
@@ -57,6 +65,7 @@ object SlaveActor {
 
 class SlaveActor extends Actor {
   val passwordWorker: ActorRef = context.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
+  var masterActorAddress: String = ""
 
   override def receive: Receive = {
     case CrackPasswordsInRange(passwords,i,j) =>
@@ -66,6 +75,7 @@ class SlaveActor extends Actor {
   }
 
   def Subscribe(addr: String) = {
+    this.masterActorAddress = addr
     val selection = context.actorSelection(addr)
     selection ! SlaveSubscription
   }
