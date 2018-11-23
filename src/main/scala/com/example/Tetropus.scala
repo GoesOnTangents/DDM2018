@@ -32,7 +32,7 @@ object Tetropus extends App {
     val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("SlaveSystem")
     val system: ActorSystem = ActorSystem("SlaveSystem", config)
     val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
-    val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+    val masterActorAddress: String = s"akka.tcp://MasterSystem@${args(4)}:42000/user/MasterActor"
     slaveActor ! Subscribe(masterActorAddress)
   }
 
