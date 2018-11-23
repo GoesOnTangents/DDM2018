@@ -23,6 +23,14 @@ class PasswordWorker() extends Actor {
     //fancy cracking functionality
     //send each password
 
+    for (x <- i until j){
+      println(s"${hash(x.toString())}")
+      //here we should actually compare and return
+    }
+    def hash(s: String): String = {
+      val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
+      m.map("%02x".format(_)).mkString
+    }
   }
 
   override def receive: Receive = {
