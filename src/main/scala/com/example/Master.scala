@@ -40,7 +40,7 @@ class MasterActor extends Actor {
 
   def read(): Unit = {
     val file_contents =
-      scala.io.Source.fromFile("students_short.csv").getLines().drop(1) //TODO dont hardcode filename
+      scala.io.Source.fromFile("students.csv").getLines().drop(1) //TODO dont hardcode filename
     breakable {
       for (line <- file_contents) {
         if (line == "") break
@@ -92,12 +92,12 @@ class MasterActor extends Actor {
   }
 
   def store_password(id: Int, password: Int): Unit = {
-    println("OMG it happened!")
+    print(".")
     cracked_passwords(id) = password
     num_cracked_passwords += 1
 
     if (num_cracked_passwords == cracked_passwords.length) {
-      println("All passwords cracked, beginning next phase! TODO: actually begin")
+      println(s"\nAll passwords cracked:\n ${cracked_passwords.deep.mkString(",")},\n beginning next phase. TODO: actually begin")
     }
   }
 
