@@ -46,7 +46,7 @@ class MasterActor extends Actor {
         this.hashes = this.hashes :+ cols(2)
         this.gene = this.gene :+ cols(3)
 
-        println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
+        //println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
       }
     }
   }
@@ -79,7 +79,7 @@ class MasterActor extends Actor {
   def subscribeSlaves(): Unit = {
     this.slaves = this.slaves :+ this.sender()
     if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
-    println(s"Current master's slaves: $this.slaves")
+    println(s"Current master's slaves:\n ${this.slaves.deep.mkString("\n")}")
   }
 
   def storePassword(id: Int, password: Int): Unit = {
