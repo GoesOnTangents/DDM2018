@@ -126,6 +126,7 @@ class MasterActor extends Actor {
   }
 }
 
+//legacy
 object Master extends App {
     if (args.length == 0) {
       println("dude, you didn't give me any parameters")
