@@ -2,12 +2,11 @@ package com.example
 
 import java.io.File
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.{CrackPasswords, Read, SlaveSubscription}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import com.example.MasterActor.Read
 import com.example.SlaveActor.CrackPasswordsInRange
 import com.typesafe.config.ConfigFactory
 
-import scala.io.BufferedSource
 import scala.util.control.Breaks.{break, breakable}
 
 object MasterActor {
@@ -16,6 +15,7 @@ object MasterActor {
   case object CrackPasswords
   case object SlaveSubscription
   case object PasswordFound
+  case object SolveLinearCombination
   case class PasswordFound(index: Int, password: Int)
 }
 
@@ -61,34 +61,33 @@ class MasterActor extends Actor {
 
   override def receive: Receive = {
     case SlaveSubscription =>
-      this.subscribeSlaves()
+      this.subscribe_slaves()
     case CrackPasswords =>
-      this.delegatePasswordCracking()
+      this.delegate_password_cracking()
     case PasswordFound(id, pw) =>
       this.store_password(id,pw)
+    case SolveLinearCombination =>
+      this.solve_linear_combination()
     case Read(filename) =>
       this.read(filename)
     case msg: Any => throw new RuntimeException("unknown message type " + msg);
 
   }
 
-  def delegatePasswordCracking(): Unit = {
+  def delegate_password_cracking(): Unit = {
     println("Delegating Passwords to Crack.")
-    var range_per_slave = 1000000 / this.slaves.size
-    var i = 0
-    var j = 0 + range_per_slave
-    for (s <- this.slaves) {
-      s ! CrackPasswordsInRange(this.hashes, i, j)
-      i += range_per_slave
-      j += range_per_slave
+    val ranges = PasswordWorker.range_split(100000, 999999, slaves.length)
+    for (i <- slaves.indices) {
+      slaves(i) ! CrackPasswordsInRange(hashes, ranges(i)._1, ranges(i)._2)
     }
-
   }
 
-  def subscribeSlaves(): Unit = {
+  def subscribe_slaves(): Unit = {
     this.slaves = this.slaves :+ this.sender()
-    println(s"Current master's slaves:\n ${this.slaves.deep.mkString("\n")}")
-    if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
+    println(s"Current master's slaves:\n ${slaves.deep.mkString("\n")}")
+    if (slaves.length == expectedSlaveAmount) {
+      self ! CrackPasswords
+    }
   }
 
   def store_password(id: Int, password: Int): Unit = {
@@ -97,8 +96,13 @@ class MasterActor extends Actor {
     num_cracked_passwords += 1
 
     if (num_cracked_passwords == cracked_passwords.length) {
-      println(s"\nAll passwords cracked:\n ${cracked_passwords.deep.mkString(",")},\n beginning next phase. TODO: actually begin")
+      self ! SolveLinearCombination
+      println(s"\nAll passwords cracked:\n ${cracked_passwords.deep.mkString(",")},\n")
     }
+  }
+
+  def solve_linear_combination(): Unit = {
+
   }
 
   def findLcsPartners(): Unit = {
@@ -113,12 +117,7 @@ class MasterActor extends Actor {
     //   ELSE start find_linear_combination()
   }
 
-  def findLinearCombination(): Unit = {
-    /* Sum all passwords
-    1.ALEX MACHT HIER MAGIE
 
-    */
-  }
 
   def find_prefixed_hashes(): Unit = {
     // Give slaves names
@@ -138,59 +137,3 @@ object Master extends App {
   val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
   masterActor ! Read
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//#main-class
-/*object AkkaQuickstart extends App {
-  import Greeter._
-
-  // Create the 'helloAkka' actor system
-  val system: ActorSystem = ActorSystem("helloAkka")
-
-  //#create-actors
-  // Create the printer actor
-  val printer: ActorRef = system.actorOf(Printer.props, "printerActor")
-
-  // Create the 'greeter' actors
-  val howdyGreeter: ActorRef =
-    system.actorOf(Greeter.props("Howdy", printer), "howdyGreeter")
-  val helloGreeter: ActorRef =
-    system.actorOf(Greeter.props("Hello", printer), "helloGreeter")
-  val goodDayGreeter: ActorRef =
-    system.actorOf(Greeter.props("Good day", printer), "goodDayGreeter")
-  //#create-actors
-
-  //#main-send-messages
-  howdyGreeter ! WhoToGreet("Akka")
-  howdyGreeter ! Greet
-
-  howdyGreeter ! WhoToGreet("Lightbend")
-  howdyGreeter ! Greet
-
-  helloGreeter ! WhoToGreet("Scala")
-  helloGreeter ! Greet
-
-  goodDayGreeter ! WhoToGreet("Play")
-  goodDayGreeter ! Greet
-  //#main-send-messages
-}
-//#main-class
-*/
-//#full-example
