@@ -17,9 +17,12 @@ class PasswordWorker() extends Actor {
   import Printer._
 
   def crackPasswordsInRange(passwords: Array[String], i: Int, j: Int) = {
+    var id = 0
+    var password = 0
     println(s"$this has started to go through passwords from $i to $j")
     //fancy cracking functionality
     //send each password
+
   }
 
   override def receive: Receive = {
