@@ -37,7 +37,7 @@ class MasterActor extends Actor {
   var partner_hashes: Array[String] = Array()
 
   def read(): Unit = {
-    this.data = scala.io.Source.fromFile("students.csv") //TODO: don't hardcode this
+    this.data = scala.io.Source.fromFile("students_short.csv") //TODO: don't hardcode this
     breakable {
       for (line <- this.data.getLines.drop(1)) {
         if (line == "") break
@@ -46,7 +46,7 @@ class MasterActor extends Actor {
         this.hashes = this.hashes :+ cols(2)
         this.gene = this.gene :+ cols(3)
 
-        //println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
+        println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
       }
     }
   }
@@ -127,7 +127,7 @@ class Printer extends Actor with ActorLogging {
 
 object Master extends App {
     if (args.length == 0) {
-      println("dude, i need at least one parameter")
+      println("dude, you didn't give me any parameters")
     }
   val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("MasterSystem")
 
