@@ -99,6 +99,7 @@ class SlaveActor extends Actor {
   }
 }
 
+//legacy:
 object Slave extends App {
   val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("SlaveSystem")
   val system: ActorSystem = ActorSystem("SlaveSystem", config)

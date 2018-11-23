@@ -11,7 +11,7 @@ import scala.util.control.Breaks.{break, breakable}
 
 object MasterActor {
   final val props: Props = Props(new MasterActor())
-  case object Read
+  case class Read(filename: String)
   case object CrackPasswords
   case object SlaveSubscription
   case object PasswordFound
@@ -38,9 +38,9 @@ class MasterActor extends Actor {
   //counter variables
   var num_cracked_passwords = 0
 
-  def read(): Unit = {
+  def read(filename: String): Unit = {
     val file_contents =
-      scala.io.Source.fromFile("students_short.csv").getLines().drop(1) //TODO dont hardcode filename
+      scala.io.Source.fromFile(filename).getLines().drop(1) //TODO dont hardcode filename
     breakable {
       for (line <- file_contents) {
         if (line == "") break
@@ -66,10 +66,10 @@ class MasterActor extends Actor {
       this.delegate_password_cracking()
     case PasswordFound(id, pw) =>
       this.store_password(id,pw)
-    case Read =>
-      this.read()
     case SolveLinearCombination =>
       this.solve_linear_combination()
+    case Read(filename) =>
+      this.read(filename)
     case msg: Any => throw new RuntimeException("unknown message type " + msg);
 
   }
@@ -91,11 +91,13 @@ class MasterActor extends Actor {
   }
 
   def store_password(id: Int, password: Int): Unit = {
+    println(".")
     cracked_passwords(id) = password
     num_cracked_passwords += 1
 
     if (num_cracked_passwords == cracked_passwords.length) {
       self ! SolveLinearCombination
+      println(s"\nAll passwords cracked:\n ${cracked_passwords.deep.mkString(",")},\n")
     }
   }
 
@@ -123,6 +125,7 @@ class MasterActor extends Actor {
   }
 }
 
+//legacy
 object Master extends App {
     if (args.length == 0) {
       println("dude, you didn't give me any parameters")
@@ -134,59 +137,3 @@ object Master extends App {
   val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
   masterActor ! Read
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//#main-class
-/*object AkkaQuickstart extends App {
-  import Greeter._
-
-  // Create the 'helloAkka' actor system
-  val system: ActorSystem = ActorSystem("helloAkka")
-
-  //#create-actors
-  // Create the printer actor
-  val printer: ActorRef = system.actorOf(Printer.props, "printerActor")
-
-  // Create the 'greeter' actors
-  val howdyGreeter: ActorRef =
-    system.actorOf(Greeter.props("Howdy", printer), "howdyGreeter")
-  val helloGreeter: ActorRef =
-    system.actorOf(Greeter.props("Hello", printer), "helloGreeter")
-  val goodDayGreeter: ActorRef =
-    system.actorOf(Greeter.props("Good day", printer), "goodDayGreeter")
-  //#create-actors
-
-  //#main-send-messages
-  howdyGreeter ! WhoToGreet("Akka")
-  howdyGreeter ! Greet
-
-  howdyGreeter ! WhoToGreet("Lightbend")
-  howdyGreeter ! Greet
-
-  helloGreeter ! WhoToGreet("Scala")
-  helloGreeter ! Greet
-
-  goodDayGreeter ! WhoToGreet("Play")
-  goodDayGreeter ! Greet
-  //#main-send-messages
-}
-//#main-class
-*/
-//#full-example
