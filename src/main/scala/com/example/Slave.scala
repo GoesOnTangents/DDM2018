@@ -1,4 +1,3 @@
-//#full-example
 package com.example
 
 import java.io.File

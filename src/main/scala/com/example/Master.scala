@@ -1,8 +1,6 @@
-//#full-example
 package com.example
 
 import java.io.File
-
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 import com.example.MasterActor.Read
 import com.example.SlaveActor.CrackPasswordsInRange
@@ -17,7 +15,6 @@ object MasterActor {
   case object CrackPasswords
   case object SlaveSubscription
   final case class PasswordFound(index: Int, password: Int)
-  //###case object Greet
 }
 
 class MasterActor extends Actor {
@@ -98,33 +95,10 @@ class MasterActor extends Actor {
     // Distribute new names when finished...
   }
 
-
-  override def receive: Receive = {
-    case SlaveSubscription =>
-      this.subscribeSlaves()
-    case CrackPasswords =>
-      this.delegatePasswordCracking()
-    case PasswordFound(id, password) =>
-      this.storePassword(id, password)
-    case Read =>
-      this.read()
-
-    }
-}
-//#greeter-actor
-
-//#printer-companion
-//#printer-messages
 object Printer {
-  //#printer-messages
   def props: Props = Props[Printer]
-  //#printer-messages
   final case class Greeting(greeting: String)
 }
-//#printer-messages
-//#printer-companion
-
-//#printer-actor
 class Printer extends Actor with ActorLogging {
   import Printer._
 
@@ -133,8 +107,6 @@ class Printer extends Actor with ActorLogging {
       log.info("Greeting received (from " + sender() + "): " + greeting)
   }
 }
-
-//#printer-actor
 
 object Master extends App {
   val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("MasterSystem")
