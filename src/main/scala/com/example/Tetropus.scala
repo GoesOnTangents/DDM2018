@@ -25,7 +25,7 @@ object Tetropus extends App {
     val system: ActorSystem = ActorSystem("MasterSystem", config)
 
     val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
-    masterActor ! Read
+    masterActor ! Read(args(6))
   }
 
   def invoke_slave: Unit ={

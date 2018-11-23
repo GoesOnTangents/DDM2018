@@ -12,7 +12,7 @@ import scala.util.control.Breaks.{break, breakable}
 
 object MasterActor {
   final val props: Props = Props(new MasterActor())
-  case object Read
+  case class Read(filename: String)
   case object CrackPasswords
   case object SlaveSubscription
   case object PasswordFound
@@ -38,9 +38,9 @@ class MasterActor extends Actor {
   //counter variables
   var num_cracked_passwords = 0
 
-  def read(): Unit = {
+  def read(filename: String): Unit = {
     val file_contents =
-      scala.io.Source.fromFile("students.csv").getLines().drop(1) //TODO dont hardcode filename
+      scala.io.Source.fromFile(filename).getLines().drop(1) //TODO dont hardcode filename
     breakable {
       for (line <- file_contents) {
         if (line == "") break
@@ -66,8 +66,8 @@ class MasterActor extends Actor {
       this.delegatePasswordCracking()
     case PasswordFound(id, pw) =>
       this.store_password(id,pw)
-    case Read =>
-      this.read()
+    case Read(filename) =>
+      this.read(filename)
     case msg: Any => throw new RuntimeException("unknown message type " + msg);
 
   }
