@@ -9,51 +9,30 @@ import com.example.PasswordWorker.Start
 import com.example.SlaveActor.{CrackPasswordsInRange, Subscribe}
 import com.typesafe.config.ConfigFactory
 
-import scala.io.BufferedSource
-import scala.util.control.Breaks.{break, breakable}
-
-//#greeter-companion
-//#greeter-messages
 object PasswordWorker {
-  //#greeter-messages
   final val props: Props = Props(new PasswordWorker())
-  //#greeter-messages
-  final case class Start(data: BufferedSource, i: Int, j: Int)
-  //###case object Greet
+  final case class Start(passwords: Array[String], i: Int, j: Int)
 }
-//#greeter-messages
-//#greeter-companion
-
-//#greeter-actor
 class PasswordWorker() extends Actor {
   import PasswordWorker._
   import Printer._
 
-  var data : BufferedSource = null
-
-  def crackPasswordsInRange(i: Int, j: Int) = {
-    /*breakable {
-      for (line <- students.getLines) {
-        if (line == "") break
-        val cols = line.split(";").map(_.trim)
-        // do whatever you want with the columns here
-        println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
-      }
-    }*/
+  def crackPasswordsInRange(passwords: Array[String], i: Int, j: Int) = {
+    //fancy cracking functionality
+    //send each password
   }
 
-
-  def receive: Receive = {
-    case Start(data,i,j) =>
-      this.data = data
-      this.crackPasswordsInRange(i,j)
+  override def receive: Receive = {
+    case Start(passwords,i,j) =>
+      this.crackPasswordsInRange(passwords,i,j)
     }
 }
 
 object SlaveActor {
-  final case class CrackPasswordsInRange(bufferedSource: BufferedSource, i: Int, j: Int)
+  final case class CrackPasswordsInRange(passwords: Array[String], i: Int, j: Int)
   final val props: Props = Props(new SlaveActor())
   final case class Subscribe(addr: String)
+  final case class
 }
 
 class SlaveActor extends Actor {
@@ -61,8 +40,8 @@ class SlaveActor extends Actor {
   val passwordworker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
   override def receive: Receive = {
-    case CrackPasswordsInRange(data,i,j) =>
-      this.passwordworker ! Start(data,i,j)
+    case CrackPasswordsInRange(passwords,i,j) =>
+      this.passwordworker ! Start(passwords,i,j) //TODO: delegate work
     case Subscribe(addr) =>
       this.Subscribe(addr)
   }
