@@ -16,13 +16,12 @@ object MasterActor {
   case object CrackPasswords
   case object SlaveSubscription
   case object PasswordFound
-  final case class PasswordFound(index: Int, password: Int)
+  case class PasswordFound(index: Int, password: Int)
 }
 
 class MasterActor extends Actor {
 
   import MasterActor._
-  var data: BufferedSource = null
   var expectedSlaveAmount: Int = 2
   var slaves: Array[ActorRef] = Array()
 
@@ -31,15 +30,19 @@ class MasterActor extends Actor {
   var gene: Array[String] = Array()
 
   //results
-  var cracked_passwords: Array[Int] = Array() //TODO: Initialize to size of csv
+  var cracked_passwords: Array[Int] = Array()
   var lcs_index: Array[Int] = Array()
   var linear_combination: Array[Boolean] = Array()
   var partner_hashes: Array[String] = Array()
 
+  //counter variables
+  var num_cracked_passwords = 0
+
   def read(): Unit = {
-    this.data = scala.io.Source.fromFile("students_short.csv") //TODO: don't hardcode this
+    val file_contents =
+      scala.io.Source.fromFile("students_short.csv").getLines().drop(1) //TODO dont hardcode filename
     breakable {
-      for (line <- this.data.getLines.drop(1)) {
+      for (line <- file_contents) {
         if (line == "") break
         val cols = line.split(";").map(_.trim)
         this.names = this.names :+ cols(1)
@@ -49,6 +52,11 @@ class MasterActor extends Actor {
         //println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
       }
     }
+    val num_lines = names.length
+    cracked_passwords = Array.ofDim(num_lines)
+    linear_combination = Array.ofDim(num_lines)
+    lcs_index = Array.ofDim(num_lines)
+    partner_hashes = Array.ofDim(num_lines)
   }
 
   override def receive: Receive = {
@@ -56,10 +64,11 @@ class MasterActor extends Actor {
       this.subscribeSlaves()
     case CrackPasswords =>
       this.delegatePasswordCracking()
-    case PasswordFound(id, password) =>
-      this.storePassword(id, password)
+    case PasswordFound(id, pw) =>
+      this.store_password(id,pw)
     case Read =>
       this.read()
+    case msg: Any => throw new RuntimeException("unknown message type " + msg);
 
   }
 
@@ -78,13 +87,18 @@ class MasterActor extends Actor {
 
   def subscribeSlaves(): Unit = {
     this.slaves = this.slaves :+ this.sender()
-    if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
     println(s"Current master's slaves:\n ${this.slaves.deep.mkString("\n")}")
+    if (this.slaves.size == this.expectedSlaveAmount) this.delegatePasswordCracking()
   }
 
-  def storePassword(id: Int, password: Int): Unit = {
-    //TODO: Store password at index
-    //TODO: IF all passwords => find_lcs_partners()
+  def store_password(id: Int, password: Int): Unit = {
+    println("OMG it happened!")
+    cracked_passwords(id) = password
+    num_cracked_passwords += 1
+
+    if (num_cracked_passwords == cracked_passwords.length) {
+      println("All passwords cracked, beginning next phase! TODO: actually begin")
+    }
   }
 
   def findLcsPartners(): Unit = {
@@ -109,19 +123,6 @@ class MasterActor extends Actor {
   def find_prefixed_hashes(): Unit = {
     // Give slaves names
     // Distribute new names when finished...
-  }
-}
-
-object Printer {
-  def props: Props = Props[Printer]
-  final case class Greeting(greeting: String)
-}
-class Printer extends Actor with ActorLogging {
-  import Printer._
-
-  def receive: Receive = {
-    case Greeting(greeting) =>
-      log.info("Greeting received (from " + sender() + "): " + greeting)
   }
 }
 

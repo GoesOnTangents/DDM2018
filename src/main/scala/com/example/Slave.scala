@@ -2,8 +2,8 @@ package com.example
 
 import java.io.File
 
-import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.SlaveSubscription
+import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSelection, ActorSystem, Props}
+import com.example.MasterActor.{PasswordFound, SlaveSubscription}
 import com.example.PasswordWorker.Start
 import com.example.SlaveActor.{CrackPasswordsInRange, Subscribe}
 import com.typesafe.config.ConfigFactory
@@ -14,23 +14,33 @@ object PasswordWorker {
 }
 class PasswordWorker() extends Actor {
   import PasswordWorker._
-  import Printer._
 
   def crackPasswordsInRange(passwords: Array[String], i: Int, j: Int) = {
-    var id = 0
-    var password = 0
+    val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+    val masterActor = context.actorSelection(masterActorAddress)
     println(s"$this has started to go through passwords from $i to $j")
     //fancy cracking functionality
     //send each password
 
-    for (x <- i until j){
-      println(s"${hash(x.toString())}")
-      //here we should actually compare and return
+    var id  = 0;
+    for (password <- i until j){
+      val hashed_password = hash(password.toString);
+      //println(s"${hashed_password}")
+      id = 0
+      for (password_hash <- passwords) {
+        if (password_hash == hashed_password) {
+          masterActor ! PasswordFound(id, password)
+          println("cracked password " + password_hash + ": " + password)
+        }
+        id += 1
+      }
     }
-    def hash(s: String): String = {
-      val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
-      m.map("%02x".format(_)).mkString
-    }
+    println("range completed")
+  }
+
+  def hash(s: String): String = {
+    val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
+    m.map("%02x".format(_)).mkString
   }
 
   override def receive: Receive = {
@@ -46,8 +56,7 @@ object SlaveActor {
 }
 
 class SlaveActor extends Actor {
-  val system: ActorSystem = ActorSystem("SlaveSystem")
-  val passwordWorker: ActorRef = system.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
+  val passwordWorker: ActorRef = context.actorOf(PasswordWorker.props, "PasswordCrackerWorker")
 
   override def receive: Receive = {
     case CrackPasswordsInRange(passwords,i,j) =>
@@ -66,8 +75,9 @@ object Slave extends App {
   val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("SlaveSystem")
   val system: ActorSystem = ActorSystem("SlaveSystem", config)
   val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
-  val addr: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
-  slaveActor ! Subscribe(addr)
+  val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  slaveActor ! Subscribe(masterActorAddress)
+
 
 }
 
