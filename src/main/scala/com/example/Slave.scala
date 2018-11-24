@@ -148,7 +148,7 @@ class LinearCombinationWorker extends Actor {
               break
             }
           }
-        }Unit
+        }
       }
       if (sum == target_sum) {
         //Combination found
