@@ -1,28 +1,31 @@
 package com.example
 
-import java.io.File
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.Read
-import com.example.SlaveActor.{CrackPasswordsInRange, FindLCSInRange, SolveLinearCombinationInRange}
-import com.typesafe.config.ConfigFactory
-import akka.actor.{Actor, ActorRef, Props}
-import com.example.SlaveActor.{CrackPasswordsInRange, SolveLinearCombinationInRange, StopSolvingLinearCombination}
+import akka.actor.{Actor, ActorRef, PoisonPill, Props}
+import com.example.SlaveActor._
 
 import scala.util.control.Breaks.{break, breakable}
 
 object MasterActor {
   final val props: Props = Props(new MasterActor())
-  case class Read(filename: String)
-  case object CrackPasswords
-  case object SlaveSubscription
-  case object PasswordFound
-  case object SolveLinearCombination
-  case class LinearCombinationFound(combination: Long)
-  case class PasswordFound(index: Int, password: Int)
-  case object SolveLCS
-  case class LCSFound(index: Int, partner: Int, length: Int)
-  case object LCSFinished
+  final case class Read(filename: String)
+
+  final case object SlaveSubscription
+
+  final case object CrackPasswords
+  final case class PasswordFound(index: Int, password: Int)
+
+  final case object SolveLinearCombination
+  final case class LinearCombinationFound(combination: Long)
+
+  final case object SolveLCS
+  final case class LCSFound(index: Int, partner: Int, length: Int)
+  final case object LCSFinished
+
+  final case object MineHashes
+  final case object HashMiningWorkRequest
+
+  final case object OutputResults
 }
 
 class MasterActor extends Actor {
@@ -33,6 +36,7 @@ class MasterActor extends Actor {
   var t1: Long = 0
   var t2: Long = 0
 
+  //inputs
   var names: Array[String] = Array()
   var hashes: Array[String] = Array()
   var genes: Array[String] = Array()
@@ -41,13 +45,15 @@ class MasterActor extends Actor {
   var cracked_passwords: Array[Int] = Array()
   var lcs_partner: Array[Int] = Array()
   var linear_combination: Array[Boolean] = Array()
-  var partner_hashes: Array[String] = Array()
+  var mined_hashes: Array[String] = Array()
 
   //counter variables
   var lcs_length: Array[Int] = Array()
   var num_cracked_passwords = 0
   var linear_combination_found = false
   var slaves_finished_with_LCS = 0
+  var next_hash_mining_student_id = 0
+  var num_hashes_stored = 0
 
   def read(filename: String): Unit = {
     val file_contents =
@@ -59,15 +65,13 @@ class MasterActor extends Actor {
         this.names = this.names :+ cols(1)
         this.hashes = this.hashes :+ cols(2)
         this.genes = this.genes :+ cols(3)
-
-        //println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
       }
     }
     val num_lines = names.length
     cracked_passwords = Array.ofDim(num_lines)
     linear_combination = Array.ofDim(num_lines)
     lcs_partner = Array.ofDim(num_lines)
-    partner_hashes = Array.ofDim(num_lines)
+    mined_hashes = Array.ofDim(num_lines)
   }
 
   override def receive: Receive = {
@@ -87,8 +91,16 @@ class MasterActor extends Actor {
       this.store_LCS(index, partner, length)
     case LCSFinished =>
       this.count_LCS_finishes()
+    case MineHashes =>
+      this.delegate_hash_mining
+    case HashMiningWorkRequest =>
+      this.distribute_hash_mining_work
+    case HashFound(id, hash) =>
+      this.store_hash(id, hash)
     case Read(filename) =>
       this.read(filename)
+    case OutputResults =>
+      this.print_results
     case msg: Any => throw new RuntimeException("unknown message type " + msg);
 
   }
@@ -117,8 +129,8 @@ class MasterActor extends Actor {
     num_cracked_passwords += 1
 
     if (num_cracked_passwords == cracked_passwords.length) {
-      self ! SolveLinearCombination
       this.t2 = System.currentTimeMillis()
+      self ! SolveLinearCombination
       println(s"\nCracked Passwords:\n ${cracked_passwords.deep.mkString(",")},\n Total time needed: ${(this.t2-this.t1)}")
     }
   }
@@ -200,8 +212,52 @@ class MasterActor extends Actor {
     }
   }
 
-  def find_prefixed_hashes(): Unit = {
-    // Give slaves names
-    // Distribute new names when finished...
+
+
+  def delegate_hash_mining() : Unit = {
+    println("Delegating hash mining.")
+    for (slave <- slaves) {
+      slave ! SlaveActor.MineHashes(linear_combination, lcs_partner)
+    }
+  }
+
+  def distribute_hash_mining_work() : Unit = {
+    if (next_hash_mining_student_id >= linear_combination.length) {
+      println(s"already gave out all hash mining work packages, so ignoring request for a new one by ${sender()}")
+      return
+    }
+    sender() ! HashMiningWorkPackage(next_hash_mining_student_id)
+    next_hash_mining_student_id += 1
+  }
+
+  def store_hash(student_id: Int, hash: String) : Unit = {
+    println(s"Storing hash $hash for id $student_id")
+    mined_hashes(student_id) = hash
+    num_hashes_stored += 1
+
+    if (num_hashes_stored == mined_hashes.length) {
+      println("Found all hashes.")
+      for (slave <- slaves) {
+        println(s"sending poison pill to $slave")
+        slave ! PoisonPill
+      }
+
+      println("Starting output phase")
+      self ! OutputResults
+    }
+  }
+
+  def print_results(): Unit = {
+    println("Printing results:")
+    for (i <- genes.indices) {
+      val id = i + 1
+      val name = names(i)
+      val password = cracked_passwords(i)
+      val prefix = if (linear_combination(i)) 1 else -1
+      val partner = lcs_partner(i) //TODO: +1?
+      val hash = mined_hashes(i)
+      println(s"$id;$name;$password;$prefix;$partner;$hash")
+    }
+    println("Printing results completed. Have a nice day")
   }
 }
