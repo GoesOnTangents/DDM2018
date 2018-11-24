@@ -32,9 +32,12 @@ class LCSWorker extends Actor {
   }
 
   def make_comparisons_for_range(i: Int, j: Int): Unit ={
-
-
-    find_partner(s,i,j)
+    //TODO: Find right ranges to work through and loop through them, if needed.
+    //for (...) {
+    //  find_partner(s,i,j)
+    //  increment something
+    //}
+    //close this worker
   }
   def find_partner(s: Int, i: Int, j: Int): Unit ={
 
