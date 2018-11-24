@@ -4,7 +4,7 @@ import java.io.File
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.example.MasterActor.Read
-import com.example.SlaveActor.{CrackPasswordsInRange, SolveLinearCombinationInRange}
+import com.example.SlaveActor.{CrackPasswordsInRange, FindLCSInRange, SolveLinearCombinationInRange}
 import com.typesafe.config.ConfigFactory
 
 import scala.util.control.Breaks.{break, breakable}
@@ -18,6 +18,9 @@ object MasterActor {
   case object SolveLinearCombination
   case class LinearCombinationFound(combination: Long)
   case class PasswordFound(index: Int, password: Int)
+  case object SolveLCS
+  case class LCSFound(index: Int, partner: Int, length: Int)
+  case object LCSFinished
 }
 
 class MasterActor extends Actor {
@@ -25,20 +28,24 @@ class MasterActor extends Actor {
   import MasterActor._
   var expectedSlaveAmount: Int = 2
   var slaves: Array[ActorRef] = Array()
+  var t1: Long = 0
+  var t2: Long = 0
 
   var names: Array[String] = Array()
   var hashes: Array[String] = Array()
-  var gene: Array[String] = Array()
+  var genes: Array[String] = Array()
 
   //results
   var cracked_passwords: Array[Int] = Array()
-  var lcs_index: Array[Int] = Array()
+  var lcs_partner: Array[Int] = Array()
   var linear_combination: Array[Boolean] = Array()
   var partner_hashes: Array[String] = Array()
 
   //counter variables
+  var lcs_length: Array[Int] = Array()
   var num_cracked_passwords = 0
   var linear_combination_found = false
+  var slaves_finished_with_LCS = 0
 
   def read(filename: String): Unit = {
     val file_contents =
@@ -49,7 +56,7 @@ class MasterActor extends Actor {
         val cols = line.split(";").map(_.trim)
         this.names = this.names :+ cols(1)
         this.hashes = this.hashes :+ cols(2)
-        this.gene = this.gene :+ cols(3)
+        this.genes = this.genes :+ cols(3)
 
         //println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}")
       }
@@ -57,7 +64,7 @@ class MasterActor extends Actor {
     val num_lines = names.length
     cracked_passwords = Array.ofDim(num_lines)
     linear_combination = Array.ofDim(num_lines)
-    lcs_index = Array.ofDim(num_lines)
+    lcs_partner = Array.ofDim(num_lines)
     partner_hashes = Array.ofDim(num_lines)
   }
 
@@ -72,6 +79,12 @@ class MasterActor extends Actor {
       this.delegate_linear_combination()
     case LinearCombinationFound(combination: Long) =>
       this.store_linear_combination(combination)
+    case SolveLCS =>
+      this.delegate_lcs()
+    case LCSFound(index, partner, length) =>
+      this.store_LCS(index, partner, length)
+    case LCSFinished =>
+      this.count_LCS_finishes()
     case Read(filename) =>
       this.read(filename)
     case msg: Any => throw new RuntimeException("unknown message type " + msg);
@@ -80,6 +93,8 @@ class MasterActor extends Actor {
 
   def delegate_password_cracking(): Unit = {
     println("Delegating Passwords to crack.")
+    this.t1 = System.currentTimeMillis()
+    println(s"Started cracking Passwords. t1: ${this.t1}")
     val ranges = PasswordWorker.range_split(100000, 999999, slaves.length)
     for (i <- slaves.indices) {
       slaves(i) ! CrackPasswordsInRange(hashes, ranges(i)._1, ranges(i)._2)
@@ -101,7 +116,8 @@ class MasterActor extends Actor {
 
     if (num_cracked_passwords == cracked_passwords.length) {
       self ! SolveLinearCombination
-      println(s"\nAll passwords cracked:\n ${cracked_passwords.deep.mkString(",")},\n")
+      this.t2 = System.currentTimeMillis()
+      println(s"\nCracked Passwords:\n ${cracked_passwords.deep.mkString(",")},\n Total time needed: ${(this.t2-this.t1)}")
     }
   }
 
@@ -139,27 +155,40 @@ class MasterActor extends Actor {
         sum += cracked_passwords(index)
       }
     }
-    println(s"sum is $sum")
+    this.t2 = System.currentTimeMillis()
+    println(s"sum is $sum.\nTotal time taken: ${(this.t2-this.t1)}")
     linear_combination_found = true
 
     //TODO trigger next step
     println("TODO: trigger gene subsequence tasks")
   }
 
-
-  def findLcsPartners(): Unit = {
+  def delegate_lcs(): Unit = {
+    val total_lcs_calls = this.names.length*this.names.length
+    println(s"Length of our list is: ${this.names.length} and we square it to: $total_lcs_calls.")
+    val ranges = PasswordWorker.range_split(0, total_lcs_calls, slaves.length)
+    for (i<- slaves.indices) {
+      slaves(i) ! FindLCSInRange(genes, ranges(i)._1, ranges(i)._2)
+    }
     //TODO: Step 1: Give slaves genes
     //Step 2: Make threadsafe Index and start distributing one name per slaves.
   }
 
-  def storePartnerAndReassignName(): Unit = {
-    //TODO: 1. Store Partner
-    //2. IF work exists: Distribute new name
-    //   IF not_yet_finished: Do nothing
-    //   ELSE start find_linear_combination()
+  def store_LCS(index: Int, partner: Int, length: Int): Unit = {
+    if (lcs_length(index) < length){
+      lcs_partner(index) = partner
+      lcs_length(index) = length
+    }
   }
 
-
+  def count_LCS_finishes(): Unit = {
+    this.slaves_finished_with_LCS += 1
+    if (this.slaves_finished_with_LCS == slaves.length) {
+      //start_next_stage
+      this.t2 = System.currentTimeMillis()
+      println(s"Found all best LCS'. \n Total time taken: ${(this.t2-this.t1)}")
+    }
+  }
 
   def find_prefixed_hashes(): Unit = {
     // Give slaves names

@@ -9,6 +9,58 @@ import com.typesafe.config.ConfigFactory
 
 import scala.util.control.Breaks.{break, breakable}
 
+object LCSWorker {
+  final val props: Props = Props(new LCSWorker())
+  final case class Start(genes: Array[String],s: Int, i: Int, j: Int)
+  final case class Setup(MasterAddress: String)
+}
+
+class LCSWorker extends Actor {
+  import LCSWorker._
+
+  //default
+  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+
+  override def receive: Receive = {
+    case Start(genes,s,i,j) =>
+      this.find_partner(genes,s,i,j)
+    case Setup(masterAddress) =>
+      this.setup(masterAddress)
+  }
+
+  def find_partner(genes: Array[String], s: Int, i: Int, j: Int): Unit ={
+    for(gene <- genes){
+      //
+    }
+  }
+
+  def lcs(a: String, b: String): Unit ={
+    lcsM(a.toList, b.toList).mkString.length()
+  }
+
+  //<<------LCS MAGIC------>>\\
+  case class Memoized[A1, A2, B](f: (A1, A2) => B) extends ((A1, A2) => B) {
+    val cache = scala.collection.mutable.Map.empty[(A1, A2), B]
+    def apply(x: A1, y: A2) = cache.getOrElseUpdate((x, y), f(x, y))
+  }
+
+  lazy val lcsM: Memoized[List[Char], List[Char], List[Char]] = Memoized {
+    case (_, Nil) => Nil
+    case (Nil, _) => Nil
+    case (x :: xs, y :: ys) if x == y => x :: lcsM(xs, ys)
+    case (x :: xs, y :: ys)           => {
+      (lcsM(x :: xs, ys), lcsM(xs, y :: ys)) match {
+        case (xs, ys) if xs.length > ys.length => xs
+        case (xs, ys)                          => ys
+      }
+    }
+  }
+  //<<------LCS MAGIC------>>\\
+
+  def setup(masterAddress: String): Unit ={
+    this.masterActorAddress = masterAddress
+  }
+}
 object LinearCombinationWorker {
   final val props: Props = Props(new LinearCombinationWorker())
   final case class Start(passwords: Array[Int], i: Long, j: Long, target_sum: Long)
@@ -155,6 +207,7 @@ object SlaveActor {
   final case class SolveLinearCombinationInRange(passwords: Array[Int], min: Long, max: Long, target_sum: Long)
   final val props: Props = Props(new SlaveActor())
   final case class Subscribe(addr: String)
+  final case class FindLCSInRange(genes: Array[String], i: Int , j: Int)
 
   final val num_local_workers = 2 //TODO: dont hardcode
 }
@@ -170,6 +223,8 @@ class SlaveActor extends Actor {
       this.start_password_workers(passwords, i, j)
     case SolveLinearCombinationInRange(passwords, i, j, sum) =>
       this.start_linear_combination_workers(passwords, i, j, sum)
+    case FindLCSInRange(genes, i, j) =>
+      this.start_lcs_workers(genes,i,j)
   }
 
   def subscribe(addr: String) = {
@@ -198,6 +253,9 @@ class SlaveActor extends Actor {
       val worker = context.actorOf(LinearCombinationWorker.props, "LinearCombinationWorker" + i)
       worker ! Start(passwords, ranges(i)._1,ranges(i)._2, target_sum)
     }
+  }
+  def start_lcs_workers(genes: Array[String],i: Int,j: Int): Unit = {
+    //TODO:
   }
 }
 
