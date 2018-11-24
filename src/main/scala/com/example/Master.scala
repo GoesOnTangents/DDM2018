@@ -175,14 +175,13 @@ class MasterActor extends Actor {
   }
 
   def delegate_lcs(): Unit = {
-    val total_lcs_calls = this.names.length*this.names.length
+    val total_lcs_calls = this.names.length
     println(s"Length of our list is: ${this.names.length} and we square it to: $total_lcs_calls.")
     val ranges = PasswordWorker.range_split(0, total_lcs_calls, slaves.length)
     for (i<- slaves.indices) {
       slaves(i) ! FindLCSInRange(genes, ranges(i)._1, ranges(i)._2)
     }
-    //TODO: Step 1: Give slaves genes
-    //Step 2: Make threadsafe Index and start distributing one name per slaves.
+
   }
 
   def store_LCS(index: Int, partner: Int, length: Int): Unit = {

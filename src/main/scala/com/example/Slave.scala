@@ -3,7 +3,8 @@ package com.example
 import java.io.File
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.{LinearCombinationFound, PasswordFound, SlaveSubscription}
+import com.example.LCSWorker.{Setup, Start}
+import com.example.MasterActor._
 import com.example.SlaveActor.{CrackPasswordsInRange, NoLinearCombinationFound, SolveLinearCombinationInRange, Subscribe}
 import com.typesafe.config.ConfigFactory
 
@@ -11,8 +12,8 @@ import scala.util.control.Breaks.{break, breakable}
 
 object LCSWorker {
   final val props: Props = Props(new LCSWorker())
-  final case class Start(genes: Array[String],s: Int, i: Int, j: Int)
-  final case class Setup(MasterAddress: String)
+  final case class Start(i: Int, j: Int)
+  final case class Setup(MasterAddress: String, genes: Array[String])
 }
 
 class LCSWorker extends Actor {
@@ -20,21 +21,38 @@ class LCSWorker extends Actor {
 
   //default
   var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  val masterActor = context.actorSelection(this.masterActorAddress)
+  var genes: Array[String] = Array()
 
   override def receive: Receive = {
-    case Start(genes,s,i,j) =>
-      this.find_partner(genes,s,i,j)
-    case Setup(masterAddress) =>
-      this.setup(masterAddress)
+    case Start(i,j) =>
+      this.make_comparisons_for_range(i,j)
+    case Setup(masterAddress, genes) =>
+      this.setup(masterAddress, genes)
   }
 
-  def find_partner(genes: Array[String], s: Int, i: Int, j: Int): Unit ={
-    for(gene <- genes){
-      //
+  def make_comparisons_for_range(i: Int, j: Int): Unit ={
+
+
+    find_partner(s,i,j)
+  }
+  def find_partner(s: Int, i: Int, j: Int): Unit ={
+
+    var maximum: Int = 0
+    var best_partner: Int = 0
+    for(x <- i until j){
+      if (s != x.toInt){
+        var this_lcs = lcs(genes(s),genes(x))
+        if (this_lcs > maximum) {
+          maximum = this_lcs
+          best_partner = x.toInt
+        }
+      }
     }
+    masterActor ! LCSFound(s,best_partner,maximum)
   }
 
-  def lcs(a: String, b: String): Unit ={
+  def lcs(a: String, b: String): Int ={
     lcsM(a.toList, b.toList).mkString.length()
   }
 
@@ -57,8 +75,9 @@ class LCSWorker extends Actor {
   }
   //<<------LCS MAGIC------>>\\
 
-  def setup(masterAddress: String): Unit ={
+  def setup(masterAddress: String, gene_list: Array[String]): Unit ={
     this.masterActorAddress = masterAddress
+    this.genes = gene_list
   }
 }
 object LinearCombinationWorker {
@@ -126,7 +145,7 @@ class LinearCombinationWorker extends Actor {
               break
             }
           }
-        }
+        }Unit
       }
       if (sum == target_sum) {
         //Combination found
@@ -284,7 +303,13 @@ class SlaveActor extends Actor {
   }
 
   def start_lcs_workers(genes: Array[String],i: Int,j: Int): Unit = {
-    //TODO:
+    val current_lower_bound = 0
+    val range_per_worker = PasswordWorker.range_split(i, j, num_local_workers)
+    for (i <- 0 until num_local_workers) {
+      val worker = context.actorOf(LCSWorker.props, "LCSWorker" + i)
+      worker ! Setup(masterActorAddress, genes)
+      worker ! Start(i,j)
+    }
   }
 
   def distribute_linear_combination_work_package(): Unit = {
