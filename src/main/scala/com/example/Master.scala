@@ -6,6 +6,8 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.example.MasterActor.Read
 import com.example.SlaveActor.{CrackPasswordsInRange, FindLCSInRange, SolveLinearCombinationInRange}
 import com.typesafe.config.ConfigFactory
+import akka.actor.{Actor, ActorRef, Props}
+import com.example.SlaveActor.{CrackPasswordsInRange, SolveLinearCombinationInRange, StopSolvingLinearCombination}
 
 import scala.util.control.Breaks.{break, breakable}
 
@@ -121,6 +123,8 @@ class MasterActor extends Actor {
     }
   }
 
+  //Note: This code might fail if more than 63 datasets have to processed,
+  //as we use Long (64 bit) as a bitmask to encode which passwords are part of the linear combination
   def delegate_linear_combination(): Unit = {
     println("Delegating linear combinations to test.")
 
@@ -148,6 +152,13 @@ class MasterActor extends Actor {
       return
     }
 
+    //tell slaves to stop working on the linear combination
+    for (slave <- slaves) {
+      println(s"Sending stop solving linear combination to $slave")
+      slave ! StopSolvingLinearCombination
+    }
+
+    //decode linear combination
     var sum: Long = 0
     for (index <- linear_combination.indices) {
       linear_combination(index) = (combination & (1L << index)) > 0
@@ -194,17 +205,4 @@ class MasterActor extends Actor {
     // Give slaves names
     // Distribute new names when finished...
   }
-}
-
-//legacy
-object Master extends App {
-    if (args.length == 0) {
-      println("dude, you didn't give me any parameters")
-    }
-  val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("MasterSystem")
-
-  val system: ActorSystem = ActorSystem("MasterSystem", config)
-
-  val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
-  masterActor ! Read
 }
