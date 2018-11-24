@@ -4,15 +4,15 @@ import java.io.File
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.example.MasterActor.{LinearCombinationFound, PasswordFound, SlaveSubscription}
-import com.example.SlaveActor.{CrackPasswordsInRange, SolveLinearCombinationInRange, Subscribe}
+import com.example.SlaveActor.{CrackPasswordsInRange, NoLinearCombinationFound, SolveLinearCombinationInRange, Subscribe}
 import com.typesafe.config.ConfigFactory
 
 import scala.util.control.Breaks.{break, breakable}
 
 object LinearCombinationWorker {
   final val props: Props = Props(new LinearCombinationWorker())
-  final case class Start(passwords: Array[Int], i: Long, j: Long, target_sum: Long)
-  final case class Setup(masterAddress: String)
+  final case class Start(range: Tuple2[Long,Long])
+  final case class Setup(masterAddress: String, passwords: Array[Int], target_sum: Long)
 
   //all values inclusive
   //TODO: this is a (almost-)duplicate of PasswordWorker.range_split
@@ -41,20 +41,26 @@ class LinearCombinationWorker extends Actor {
 
   //default
   var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  var passwords: Array[Int] = Array[Int]()
+  var target_sum: Long = -1L
 
   override def receive: Receive = {
-    case Start(passwords, i, j, sum) =>
-      this.solve_linear_combination(passwords, i, j, sum)
-    case Setup(masterAddress) =>
-      this.setup(masterAddress)
+    case Start(range) =>
+      this.solve_linear_combination(range)
+    case Setup(masterAddress, passwords, target_sum) =>
+      this.setup(masterAddress, passwords, target_sum)
   }
 
-  def setup(masterAddress: String): Unit ={
+  def setup(masterAddress: String, passwords: Array[Int], target_sum: Long): Unit ={
     this.masterActorAddress = masterAddress
+    this.passwords = passwords
+    this.target_sum = target_sum
   }
 
-  def solve_linear_combination(passwords: Array[Int], min: Long, max: Long, target_sum: Long): Unit = {
+  def solve_linear_combination(range: Tuple2[Long, Long]): Unit = {
     val masterActor = context.actorSelection(this.masterActorAddress)
+    val min = range._1
+    val max = range._2
     println(s"$this has started to go through passwords from $min to $max")
 
     var combination: Long = min
@@ -74,11 +80,12 @@ class LinearCombinationWorker extends Actor {
         //Combination found
         println("found a combination: " + combination)
         masterActor ! LinearCombinationFound(combination)
+        return
       }
       combination += 1
     }
 
-    context.stop(self)
+    context.parent ! NoLinearCombinationFound //TODO: is this good style, or should we do ActorSelection("SlaveActor")?
   }
 }
 
@@ -151,10 +158,15 @@ class PasswordWorker() extends Actor {
 }
 
 object SlaveActor {
-  final case class CrackPasswordsInRange(passwords: Array[String], i: Int, j: Int)
-  final case class SolveLinearCombinationInRange(passwords: Array[Int], min: Long, max: Long, target_sum: Long)
   final val props: Props = Props(new SlaveActor())
+
   final case class Subscribe(addr: String)
+
+  final case class CrackPasswordsInRange(passwords: Array[String], i: Int, j: Int)
+
+  final case class SolveLinearCombinationInRange(passwords: Array[Int], min: Long, max: Long, target_sum: Long)
+  final case object StopSolvingLinearCombination
+  final case object NoLinearCombinationFound
 
   final val num_local_workers = 2 //TODO: dont hardcode
 }
@@ -163,6 +175,11 @@ class SlaveActor extends Actor {
   import SlaveActor._
   var masterActorAddress: String = ""
 
+  var linear_combination_ranges : Vector[Tuple2[Long,Long]] = Vector[Tuple2[Long,Long]]()
+  var linear_combination_next_index = 0
+  var linear_combination_actors : Vector[ActorRef] = Vector[ActorRef]()
+
+
   override def receive: Receive = {
     case Subscribe(addr) =>
       this.subscribe(addr)
@@ -170,6 +187,10 @@ class SlaveActor extends Actor {
       this.start_password_workers(passwords, i, j)
     case SolveLinearCombinationInRange(passwords, i, j, sum) =>
       this.start_linear_combination_workers(passwords, i, j, sum)
+    case NoLinearCombinationFound =>
+      this.distribute_linear_combination_work_package
+    case StopSolvingLinearCombination =>
+      this.stop_solving_linear_combination
   }
 
   def subscribe(addr: String) = {
@@ -181,34 +202,49 @@ class SlaveActor extends Actor {
   def start_password_workers(passwords: Array[String], min: Int, max: Int): Unit = {
     import PasswordWorker.{Start,Setup}
 
-
     val ranges = PasswordWorker.range_split(min, max, num_local_workers)
     for (i <- ranges.indices) {
       val worker = context.actorOf(PasswordWorker.props, "PasswordCrackerWorker" + i)
-      worker ! Setup(this.masterActorAddress)
+      worker ! Setup(masterActorAddress)
       worker ! Start(passwords, ranges(i)._1,ranges(i)._2)
     }
   }
 
   def start_linear_combination_workers(passwords: Array[Int], min: Long, max: Long, target_sum: Long): Unit = {
-    import LinearCombinationWorker.Start
+    import LinearCombinationWorker.{Setup, Start}
 
-    val ranges = LinearCombinationWorker.range_split(min, max, num_local_workers)
-    for (i <- ranges.indices) {
-      val worker = context.actorOf(LinearCombinationWorker.props, "LinearCombinationWorker" + i)
-      worker ! Start(passwords, ranges(i)._1,ranges(i)._2, target_sum)
+    //we want to get ranges of a fixed size, so that workers dont get stuck working on too huge datasets
+    //and can abort faster if they receive the corresponding message
+    //TODO: in theory, the line below could fail if the second parameter is bigger than Int.maxValue
+    //TODO: however, this won't happen in our scenario, so we ignore it for now
+    val num_ranges: Int = math.max(num_local_workers, ((max - min + 1L) / 10000000L).toInt)
+    linear_combination_ranges = LinearCombinationWorker.range_split(min, max, num_ranges)
+    for (i <- 0 until num_local_workers) {
+      val actor = context.actorOf(LinearCombinationWorker.props, "LinearCombinationWorker" + i)
+      actor ! Setup(masterActorAddress, passwords, target_sum)
+      actor ! Start(linear_combination_ranges(i))
+      linear_combination_actors = linear_combination_actors :+ actor
+    }
+    linear_combination_next_index = num_local_workers
+  }
+
+  def distribute_linear_combination_work_package(): Unit = {
+    import LinearCombinationWorker.Start
+    if (linear_combination_next_index >= linear_combination_ranges.length) {
+      println(s"${this.sender()} finished, but all work packages are already given out")
+      return
+    }
+
+    this.sender() ! Start(linear_combination_ranges(linear_combination_next_index))
+    linear_combination_next_index += 1
+  }
+
+  def stop_solving_linear_combination(): Unit = {
+    println("stop_solving_linear_combination called")
+    for (actor <- linear_combination_actors) {
+      println(s"stopping $actor")
+      context.stop(actor) //TODO good style, or rather PoisonPill?
+
     }
   }
 }
-
-//legacy:
-object Slave extends App {
-  val config = ConfigFactory.parseFile(new File("application.conf")).getConfig("SlaveSystem")
-  val system: ActorSystem = ActorSystem("SlaveSystem", config)
-  val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
-  val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
-  slaveActor ! Subscribe(masterActorAddress)
-
-
-}
-
