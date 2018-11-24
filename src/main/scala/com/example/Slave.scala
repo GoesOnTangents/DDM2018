@@ -12,6 +12,7 @@ import scala.util.control.Breaks.{break, breakable}
 object LinearCombinationWorker {
   final val props: Props = Props(new LinearCombinationWorker())
   final case class Start(passwords: Array[Int], i: Long, j: Long, target_sum: Long)
+  final case class Setup(masterAddress: String)
 
   //all values inclusive
   //TODO: this is a (almost-)duplicate of PasswordWorker.range_split
@@ -38,14 +39,22 @@ object LinearCombinationWorker {
 class LinearCombinationWorker extends Actor {
   import LinearCombinationWorker._
 
+  //default
+  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+
   override def receive: Receive = {
     case Start(passwords, i, j, sum) =>
       this.solve_linear_combination(passwords, i, j, sum)
+    case Setup(masterAddress) =>
+      this.setup(masterAddress)
+  }
+
+  def setup(masterAddress: String): Unit ={
+    this.masterActorAddress = masterAddress
   }
 
   def solve_linear_combination(passwords: Array[Int], min: Long, max: Long, target_sum: Long): Unit = {
-    val masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
-    val masterActor = context.actorSelection(masterActorAddress)
+    val masterActor = context.actorSelection(this.masterActorAddress)
     println(s"$this has started to go through passwords from $min to $max")
 
     var combination: Long = min
