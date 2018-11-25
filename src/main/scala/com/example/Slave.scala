@@ -3,7 +3,6 @@ package com.example
 import java.io.File
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import com.example.LCSWorker.{Setup, Start}
 import com.example.MasterActor._
 import com.example.SlaveActor.{CrackPasswordsInRange, NoLinearCombinationFound, SolveLinearCombinationInRange, Subscribe}
 import com.typesafe.config.ConfigFactory
@@ -32,31 +31,36 @@ class LCSWorker extends Actor {
   }
 
   def make_comparisons_for_range(i: Int, j: Int): Unit ={
-    //TODO: Find right ranges to work through and loop through them, if needed.
-    //for (...) {
-    //  find_partner(s,i,j)
-    //  increment something
-    //}
-    //close this worker
-  }
-  def find_partner(s: Int, i: Int, j: Int): Unit ={
+    println(s"$this has range: ($i, $j)")
+    val genes_length = genes.length
+    var student: Int = i / genes_length
+    var candidate: Int = i % genes_length
+    var res: Int = 0
 
-    var maximum: Int = 0
-    var best_partner: Int = 0
-    for(x <- i until j){
-      if (s != x.toInt){
-        var this_lcs = lcs(genes(s),genes(x))
-        if (this_lcs > maximum) {
-          maximum = this_lcs
-          best_partner = x.toInt
-        }
+    //TODO: break condition could be less hacky and more "until a certain student + candidate combination is found
+    for (x <- i until j) {
+      if (genes(student) != genes(candidate)) {
+        res = lcs(genes(student), genes(candidate))
+        masterActor ! LCSFound(student, candidate, res)
+      }
+      candidate += 1
+      //if all candidates for student have been exhausted, but we still got range, check the next student
+      if (candidate == genes_length) {
+        student += 1
+        candidate = 0
       }
     }
-    masterActor ! LCSFound(s,best_partner,maximum)
+    //close this worker
+    context.stop(self)
   }
 
+
   def lcs(a: String, b: String): Int ={
-    lcsM(a.toList, b.toList).mkString.length()
+    val start = 20
+    val end   = 30
+    val rnd = new scala.util.Random
+    start + rnd.nextInt( (end - start) + 1 )
+    //lcsM(a.toList, b.toList).mkString.length()
   }
 
   //<<------LCS MAGIC------>>\\
@@ -306,12 +310,12 @@ class SlaveActor extends Actor {
   }
 
   def start_lcs_workers(genes: Array[String],i: Int,j: Int): Unit = {
-    val current_lower_bound = 0
-    val range_per_worker = PasswordWorker.range_split(i, j, num_local_workers)
-    for (i <- 0 until num_local_workers) {
-      val worker = context.actorOf(LCSWorker.props, "LCSWorker" + i)
+    import LCSWorker.{Setup, Start}
+    val ranges = PasswordWorker.range_split(i, j, num_local_workers)
+    for (w <- ranges.indices) {
+      val worker = context.actorOf(LCSWorker.props, "LCSWorker" + w)
       worker ! Setup(masterActorAddress, genes)
-      worker ! Start(i,j)
+      worker ! Start(ranges(w)._1, ranges(w)._2)
     }
   }
 

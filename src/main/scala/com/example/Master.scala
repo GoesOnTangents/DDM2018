@@ -44,10 +44,11 @@ class MasterActor extends Actor {
   var partner_hashes: Array[String] = Array()
 
   //counter variables
-  var lcs_length: Array[Int] = Array()
   var num_cracked_passwords = 0
   var linear_combination_found = false
-  var slaves_finished_with_LCS = 0
+  var lcs_candidates_checked: Array[Int] = Array()
+  var lcs_max: Array[Int] = Array()
+  var lcs_students_finished: Int = 0
 
   def read(filename: String): Unit = {
     val file_contents =
@@ -68,6 +69,9 @@ class MasterActor extends Actor {
     linear_combination = Array.ofDim(num_lines)
     lcs_partner = Array.ofDim(num_lines)
     partner_hashes = Array.ofDim(num_lines)
+    lcs_candidates_checked = Array.ofDim(num_lines)
+    lcs_max = Array.ofDim(num_lines)
+
   }
 
   override def receive: Receive = {
@@ -107,7 +111,8 @@ class MasterActor extends Actor {
     slaves = slaves :+ sender()
     println(s"Current master's slaves:\n ${slaves.deep.mkString("\n")}")
     if (slaves.length == expectedSlaveAmount) {
-      self ! CrackPasswords
+      //self ! CrackPasswords
+      self ! SolveLCS
     }
   }
 
@@ -117,9 +122,9 @@ class MasterActor extends Actor {
     num_cracked_passwords += 1
 
     if (num_cracked_passwords == cracked_passwords.length) {
-      self ! SolveLinearCombination
       this.t2 = System.currentTimeMillis()
       println(s"\nCracked Passwords:\n ${cracked_passwords.deep.mkString(",")},\n Total time needed: ${(this.t2-this.t1)}")
+      self ! SolveLinearCombination
     }
   }
 
@@ -169,15 +174,13 @@ class MasterActor extends Actor {
     this.t2 = System.currentTimeMillis()
     println(s"sum is $sum.\nTotal time taken: ${(this.t2-this.t1)}")
     linear_combination_found = true
-
-    //TODO trigger next step
-    println("TODO: trigger gene subsequence tasks")
+    self ! SolveLCS
   }
 
   def delegate_lcs(): Unit = {
-    val total_lcs_calls = this.names.length*this.names.length
-    println(s"Length of our list is: ${this.names.length} and we square it to: $total_lcs_calls.")
-    val ranges = PasswordWorker.range_split(0, total_lcs_calls, slaves.length)
+    val total_lcs_comparisons = this.names.length*this.names.length
+    println(s"Length of our list is: ${this.names.length} and we square it to: $total_lcs_comparisons.")
+    val ranges = PasswordWorker.range_split(0, total_lcs_comparisons, slaves.length)
     for (i<- slaves.indices) {
       slaves(i) ! FindLCSInRange(genes, ranges(i)._1, ranges(i)._2)
     }
@@ -185,18 +188,24 @@ class MasterActor extends Actor {
   }
 
   def store_LCS(index: Int, partner: Int, length: Int): Unit = {
-    if (lcs_length(index) < length){
+    if (lcs_max(index) < length){
       lcs_partner(index) = partner
-      lcs_length(index) = length
+      lcs_max(index) = length
+    }
+    lcs_candidates_checked(index) += 1
+    if (lcs_candidates_checked(index) == genes.length - 1) {
+      //println(s"Student ${index} has had ${lcs_candidates_checked(index) + 1} candidates checked. LCS: ${lcs_max(index)}, with candidate ${lcs_partner(index)}.")
+      self ! LCSFinished
     }
   }
 
   def count_LCS_finishes(): Unit = {
-    this.slaves_finished_with_LCS += 1
-    if (this.slaves_finished_with_LCS == slaves.length) {
-      //start_next_stage
+    lcs_students_finished += 1
+    println(s"Currently, $lcs_students_finished students have evaluated their LCS candidates.")
+    if (lcs_students_finished == genes.length-1) {
       this.t2 = System.currentTimeMillis()
       println(s"Found all best LCS'. \n Total time taken: ${(this.t2-this.t1)}")
+      //start_next_stage
     }
   }
 
