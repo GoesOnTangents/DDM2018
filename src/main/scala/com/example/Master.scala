@@ -91,9 +91,9 @@ class MasterActor extends Actor {
     case SolveLCS =>
       this.delegate_lcs()
     case LCSFound(index, partner, length) =>
-      this.store_LCS(index, partner, length)
+      this.store_lcs(index, partner, length)
     case LCSFinished =>
-      this.count_LCS_finishes()
+      this.count_lcs_finishes()
     case MineHashes =>
       this.delegate_hash_mining
     case HashMiningWorkRequest =>
@@ -197,7 +197,7 @@ class MasterActor extends Actor {
 
   }
 
-  def store_LCS(index: Int, partner: Int, length: Int): Unit = {
+  def store_lcs(index: Int, partner: Int, length: Int): Unit = {
     if (lcs_max(index) < length){
       lcs_partner(index) = partner
       lcs_max(index) = length
@@ -205,12 +205,12 @@ class MasterActor extends Actor {
     lcs_candidates_checked(index) += 1
     if (lcs_candidates_checked(index) == genes.length - 1) {
       //print(s"Student ${index} has had ${lcs_candidates_checked(index) + 1} candidates checked. LCS: ${lcs_max(index)}, with candidate ${lcs_partner(index)}.")
-      print(".")
+      print(s"$index,")
       self ! LCSFinished
     }
   }
 
-  def count_LCS_finishes(): Unit = {
+  def count_lcs_finishes(): Unit = {
     lcs_students_finished += 1
     if (lcs_students_finished == genes.length) {
       this.t2 = System.currentTimeMillis()
@@ -256,13 +256,13 @@ class MasterActor extends Actor {
   }
 
   def print_results(): Unit = {
-    println("Printing results:")
+    println(s"After ${(this.t2-this.t1)} milliseconds, these are the results:")
     for (i <- genes.indices) {
       val id = i + 1
       val name = names(i)
       val password = cracked_passwords(i)
       val prefix = if (linear_combination(i)) 1 else -1
-      val partner = lcs_partner(i) //TODO: +1?
+      val partner = lcs_partner(i+1) // +1? Yes. :D
       val hash = mined_hashes(i)
       println(s"$id;$name;$password;$prefix;$partner;$hash")
     }
