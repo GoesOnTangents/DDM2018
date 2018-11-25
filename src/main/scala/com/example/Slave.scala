@@ -1,13 +1,64 @@
 package com.example
 
-import java.io.File
+import akka.actor.{Actor, ActorRef, Props}
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.example.MasterActor._
-import com.example.SlaveActor.{CrackPasswordsInRange, NoLinearCombinationFound, SolveLinearCombinationInRange, Subscribe}
-import com.typesafe.config.ConfigFactory
+import com.example.SlaveActor.{HashFound, NoLinearCombinationFound}
 
 import scala.util.control.Breaks.{break, breakable}
+
+object HashMiningActor {
+  final val props: Props = Props(new HashMiningActor())
+  final case class Setup(master_actor_adress: String, linear_combination : Array[Boolean], lcs_partner: Array[Int])
+  final case class Start(student_id: Int, range: Tuple2[Int,Int])
+}
+
+class HashMiningActor extends Actor {
+  import HashMiningActor._
+
+  //default
+  var master_actor_address: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  var linear_combination : Array[Boolean] = Array[Boolean]()
+  var lcs_partner : Array[Int] = Array[Int]()
+
+  override def receive: Receive = {
+    case Setup(master_actor_address, linear_combination, lcs_partner) =>
+      this.setup(master_actor_address, linear_combination, lcs_partner)
+    case Start(id, range) =>
+      this.mine_hashes(id, range)
+  }
+
+  //we consider id's as starting from 0, not 1
+  //TODO: do partner ids start with 0 or 1?
+  def mine_hashes(student_id: Int, range: Tuple2[Int,Int]): Unit = {
+    println(s"${this} started to mine hashes in range ${range._1} to ${range._2}")
+
+    val target_prefix = if (linear_combination(student_id)) "11111" else "00000"
+    val partner_id = lcs_partner(student_id)
+
+    val min = range._1
+    val max = range._2
+
+    var nonce = 0
+    var hash = ""
+    val rand = new scala.util.Random
+    while (!hash.startsWith(target_prefix)) {
+      nonce = min + rand.nextInt(max - min + 1)
+      hash = PasswordWorker.hash_int(partner_id + nonce)
+    }
+
+    //password found
+    println(s"found hash $hash for student with (0-based) id $student_id")
+    context.parent ! HashFound(student_id, hash)
+  }
+
+  def setup(master_actor_address: String, linear_combination : Array[Boolean], lcs_partner: Array[Int]): Unit = {
+    this.master_actor_address = master_actor_address
+    this.linear_combination = linear_combination
+    this.lcs_partner = lcs_partner
+  }
+}
+
 
 object LCSWorker {
   final val props: Props = Props(new LCSWorker())
@@ -91,6 +142,7 @@ class LCSWorker extends Actor {
     this.genes = gene_list
   }
 }
+
 object LinearCombinationWorker {
   final val props: Props = Props(new LinearCombinationWorker())
   final case class Start(range: Tuple2[Long,Long])
@@ -99,8 +151,8 @@ object LinearCombinationWorker {
   //all values inclusive
   //TODO: this is a (almost-)duplicate of PasswordWorker.range_split
   //TODO: if we got too much time, we could figure out how generics work in scala and reduce redundancy
-  def range_split(min: Long, max: Long, num_batches: Int): Vector[Tuple2[Long,Long]] = {
-    var result = Vector[Tuple2[Long,Long]]()
+  def range_split(min: Long, max: Long, num_batches: Int): Array[Tuple2[Long,Long]] = {
+    var result = Array[Tuple2[Long,Long]]()
 
     val total_range = max - min + 1L
 
@@ -195,6 +247,14 @@ object PasswordWorker {
     result
   }
 
+  def hash(s: String): String = {
+    val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
+    m.map("%02x".format(_)).mkString
+  }
+
+  def hash_int(i: Int): String = {
+    hash(i.toString)
+  }
 }
 class PasswordWorker() extends Actor {
   import PasswordWorker._
@@ -226,11 +286,6 @@ class PasswordWorker() extends Actor {
     this.masterActorAddress = masterAddress
   }
 
-  def hash(s: String): String = {
-    val m = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"))
-    m.map("%02x".format(_)).mkString
-  }
-
   override def receive: Receive = {
     case Start(passwords, i, j) =>
       this.crack_passwords_in_range(passwords,i,j)
@@ -251,17 +306,23 @@ object SlaveActor {
   final case object StopSolvingLinearCombination
   final case object NoLinearCombinationFound
 
+  final case class MineHashes(linear_combination: Array[Boolean], lcs_partner: Array[Int])
+  final case class HashMiningWorkPackage(student_id: Int)
+  final case class HashFound(student_id: Int, hash: String)
+
   final val num_local_workers = 2 //TODO: dont hardcode
 }
 
 class SlaveActor extends Actor {
   import SlaveActor._
-  var masterActorAddress: String = ""
+  var master_actor_address: String = ""
 
-  var linear_combination_ranges : Vector[Tuple2[Long,Long]] = Vector[Tuple2[Long,Long]]()
+  var linear_combination_ranges : Array[Tuple2[Long,Long]] = Array[Tuple2[Long,Long]]()
   var linear_combination_next_index = 0
-  var linear_combination_actors : Vector[ActorRef] = Vector[ActorRef]()
+  var linear_combination_actors : Array[ActorRef] = Array[ActorRef]()
 
+  var hash_mining_actors : Array[ActorRef] = Array[ActorRef]()
+  var hash_mining_actors_current_index = -1 //invalid value
 
   override def receive: Receive = {
     case Subscribe(addr) =>
@@ -276,10 +337,16 @@ class SlaveActor extends Actor {
       this.distribute_linear_combination_work_package
     case StopSolvingLinearCombination =>
       this.stop_solving_linear_combination
+    case MineHashes(linear_combination, lcs_partner) =>
+      this.start_hash_mining_workers(linear_combination, lcs_partner)
+    case HashMiningWorkPackage(id) =>
+      this.distribute_hash_mining_work_package(id)
+    case HashFound(id, hash) =>
+      this.report_hash(id, hash)
   }
 
   def subscribe(addr: String) = {
-    this.masterActorAddress = addr
+    this.master_actor_address = addr
     val selection = context.actorSelection(addr)
     selection ! SlaveSubscription
   }
@@ -290,7 +357,7 @@ class SlaveActor extends Actor {
     val ranges = PasswordWorker.range_split(min, max, num_local_workers)
     for (i <- ranges.indices) {
       val worker = context.actorOf(PasswordWorker.props, "PasswordCrackerWorker" + i)
-      worker ! Setup(masterActorAddress)
+      worker ! Setup(master_actor_address)
       worker ! Start(passwords, ranges(i)._1,ranges(i)._2)
     }
   }
@@ -304,9 +371,10 @@ class SlaveActor extends Actor {
     //TODO: however, this won't happen in our scenario, so we ignore it for now
     val num_ranges: Int = math.max(num_local_workers, ((max - min + 1L) / 10000000L).toInt)
     linear_combination_ranges = LinearCombinationWorker.range_split(min, max, num_ranges)
+    linear_combination_actors = Array[ActorRef]()
     for (i <- 0 until num_local_workers) {
       val actor = context.actorOf(LinearCombinationWorker.props, "LinearCombinationWorker" + i)
-      actor ! Setup(masterActorAddress, passwords, target_sum)
+      actor ! Setup(master_actor_address, passwords, target_sum)
       actor ! Start(linear_combination_ranges(i))
       linear_combination_actors = linear_combination_actors :+ actor
     }
@@ -318,7 +386,7 @@ class SlaveActor extends Actor {
     val ranges = PasswordWorker.range_split(i, j, num_local_workers)
     for (w <- ranges.indices) {
       val worker = context.actorOf(LCSWorker.props, "LCSWorker" + w)
-      worker ! Setup(masterActorAddress, genes)
+      worker ! Setup(master_actor_address, genes)
       worker ! Start(ranges(w)._1, ranges(w)._2)
     }
   }
@@ -339,7 +407,43 @@ class SlaveActor extends Actor {
     for (actor <- linear_combination_actors) {
       println(s"stopping $actor")
       context.stop(actor) //TODO good style, or rather PoisonPill?
-
     }
+  }
+
+  def start_hash_mining_workers(linear_combination: Array[Boolean], lcs_partner: Array[Int]) : Unit = {
+    import HashMiningActor.Setup
+
+    for (i <- 0 until num_local_workers) {
+      val actor: ActorRef = context.actorOf(HashMiningActor.props)
+      actor ! Setup(master_actor_address, linear_combination, lcs_partner)
+      hash_mining_actors = hash_mining_actors :+ actor
+    }
+
+    val master_actor = context.actorSelection(master_actor_address)
+    master_actor ! HashMiningWorkRequest
+  }
+
+  def distribute_hash_mining_work_package(student_id: Int) : Unit = {
+    import HashMiningActor.Start
+
+    hash_mining_actors_current_index = student_id
+
+    val hash_mining_ranges : Vector[Tuple2[Int,Int]] = PasswordWorker.range_split(Int.MinValue, Int.MaxValue, num_local_workers)
+    for (i <- hash_mining_actors.indices) {
+      hash_mining_actors(i) ! Start(student_id, hash_mining_ranges(i))
+    }
+  }
+
+  def report_hash(student_id: Int, hash: String): Unit = {
+    //TODO: We assume that we do not get 2 HashMiningWorkPackage messages without getting a HashFound message in between
+    //TODO: This should be a valid assumption as long as we control the master, however dunno if its good style
+    if (student_id != hash_mining_actors_current_index) {
+      println(s"${this.sender()} found a hash for student with id $student_id. Discarding it as we already found a hash for that id.")
+      return
+    }
+
+    val master_actor = context.actorSelection(master_actor_address)
+    hash_mining_actors_current_index = -1 //invalid value, causing second/third etc HashFound messages to be ignored
+    master_actor ! HashFound(student_id, hash)
   }
 }
