@@ -133,7 +133,6 @@ class MasterActor extends Actor {
 
     if (num_cracked_passwords == cracked_passwords.length) {
       this.t2 = System.currentTimeMillis()
-      self ! SolveLinearCombination
       println(s"\nCracked Passwords:\n ${cracked_passwords.deep.mkString(",")},\n Total time needed: ${(this.t2-this.t1)}")
       self ! SolveLinearCombination
     }
