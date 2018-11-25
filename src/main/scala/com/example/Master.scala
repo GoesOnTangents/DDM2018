@@ -179,7 +179,7 @@ class MasterActor extends Actor {
 
   def delegate_lcs(): Unit = {
     val total_lcs_comparisons = this.names.length*this.names.length
-    println(s"Length of our list is: ${this.names.length} and we square it to: $total_lcs_comparisons.")
+    println(s"Length of our list is: ${this.names.length} squared: $total_lcs_comparisons.\n")
     val ranges = PasswordWorker.range_split(0, total_lcs_comparisons, slaves.length)
     for (i<- slaves.indices) {
       slaves(i) ! FindLCSInRange(genes, ranges(i)._1, ranges(i)._2)
@@ -194,17 +194,17 @@ class MasterActor extends Actor {
     }
     lcs_candidates_checked(index) += 1
     if (lcs_candidates_checked(index) == genes.length - 1) {
-      //println(s"Student ${index} has had ${lcs_candidates_checked(index) + 1} candidates checked. LCS: ${lcs_max(index)}, with candidate ${lcs_partner(index)}.")
+      //print(s"Student ${index} has had ${lcs_candidates_checked(index) + 1} candidates checked. LCS: ${lcs_max(index)}, with candidate ${lcs_partner(index)}.")
+      print(".")
       self ! LCSFinished
     }
   }
 
   def count_LCS_finishes(): Unit = {
     lcs_students_finished += 1
-    println(s"Currently, $lcs_students_finished students have evaluated their LCS candidates.")
-    if (lcs_students_finished == genes.length-1) {
+    if (lcs_students_finished == genes.length) {
       this.t2 = System.currentTimeMillis()
-      println(s"Found all best LCS'. \n Total time taken: ${(this.t2-this.t1)}")
+      println(s"\n Finished LCS. \n Total time: ${(this.t2-this.t1)}")
       //start_next_stage
     }
   }

@@ -36,21 +36,25 @@ class LCSWorker extends Actor {
     var student: Int = i / genes_length
     var candidate: Int = i % genes_length
     var res: Int = 0
+    var counter: Int = 0
 
-    //TODO: break condition could be less hacky and more "until a certain student + candidate combination is found
-    for (x <- i until j) {
+    //TODO: make condition less hacky and more "until a certain student + candidate combination is met
+    for (x <- i until j+1) {
       if (genes(student) != genes(candidate)) {
         res = lcs(genes(student), genes(candidate))
         masterActor ! LCSFound(student, candidate, res)
+        counter += 1
       }
       candidate += 1
       //if all candidates for student have been exhausted, but we still got range, check the next student
       if (candidate == genes_length) {
-        student += 1
+        if (student+1 < genes_length) student += 1
+        //Counting students is some circle of hell, I'm sure.
         candidate = 0
       }
     }
     //close this worker
+    println(s"$this has finished after sending $counter messages to master.")
     context.stop(self)
   }
 
