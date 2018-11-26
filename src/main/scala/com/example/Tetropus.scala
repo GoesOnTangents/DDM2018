@@ -2,8 +2,7 @@ package com.example
 
 import java.io.File
 
-import com.example._
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import com.example.MasterActor.{Read, SetSlaves}
 import com.example.SlaveActor.{SetWorkers, Subscribe}
 import com.typesafe.config.ConfigFactory

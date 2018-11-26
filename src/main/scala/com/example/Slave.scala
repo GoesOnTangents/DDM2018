@@ -30,8 +30,6 @@ class HashMiningActor extends Actor {
       this.mine_hashes(id, range)
   }
 
-  //we consider id's as starting from 0, not 1
-  //TODO: do partner ids start with 0 or 1?
   def mine_hashes(student_id: Int, range: Tuple2[Long,Long]): Unit = {
     println(s"${this} started to mine hashes in range ${range._1} to ${range._2}")
 
@@ -47,7 +45,7 @@ class HashMiningActor extends Actor {
     var counter = 0
     while (!hash.startsWith(target_prefix)) {
 
-      nonce = (min + rand.nextInt((max - min + 1).toInt)).toInt
+      nonce = rand.nextInt();//(min + rand.nextInt((max - min + 1).toInt)).toInt
       hash = PasswordWorker.hash_int(partner_id + nonce)
       counter += 1
       if (counter % 100000 == 0) {
@@ -97,7 +95,6 @@ class LCSWorker extends Actor {
     var res: Int = 0
     var counter: Int = 0
 
-    //TODO: make condition less hacky and more "until a certain student + candidate combination is met
     for (x <- i until j+1) {
       if (genes(student) != genes(candidate)) {
         res = lcs(genes(student), genes(candidate))
@@ -117,7 +114,7 @@ class LCSWorker extends Actor {
     context.stop(self)
   }
 
-  def longestSubstr(s: String, t: String): Int = {
+  def lcs(s: String, t: String): Int = {
     if (s.isEmpty || t.isEmpty) return 0
     val m = s.length
     val n = t.length
@@ -154,18 +151,6 @@ class LCSWorker extends Actor {
     maxLen
   }
 
-  def lcs(a: String, b: String): Int ={
-    /*val start = 20
-    val end   = 30
-    val rnd = new scala.util.Random
-    start + rnd.nextInt( (end - start) + 1 )
-    lcsM(a.toList, b.toList).mkString.length()*/
-    val ret = longestSubstr(a,b)
-    println(s"$ret")
-    //ret.length()
-    ret
-  }
-
   def setup(masterAddress: String, gene_list: Array[String]): Unit ={
     this.masterActorAddress = masterAddress
     this.genes = gene_list
@@ -178,8 +163,6 @@ object LinearCombinationWorker {
   final case class Setup(masterAddress: String, passwords: Array[Int], target_sum: Long)
 
   //all values inclusive
-  //TODO: this is a (almost-)duplicate of PasswordWorker.range_split
-  //TODO: if we got too much time, we could figure out how generics work in scala and reduce redundancy
   def range_split(min: Long, max: Long, num_batches: Int): Array[Tuple2[Long,Long]] = {
     var result = Array[Tuple2[Long,Long]]()
 
@@ -248,7 +231,7 @@ class LinearCombinationWorker extends Actor {
       combination += 1
     }
 
-    context.parent ! NoLinearCombinationFound //TODO: is this good style, or should we do ActorSelection("SlaveActor")?
+    context.parent ! NoLinearCombinationFound
   }
 }
 
@@ -400,8 +383,8 @@ class SlaveActor extends Actor {
 
     //we want to get ranges of a fixed size, so that workers dont get stuck working on too huge datasets
     //and can abort faster if they receive the corresponding message
-    //TODO: in theory, the line below could fail if the second parameter is bigger than Int.maxValue
-    //TODO: however, this won't happen in our scenario, so we ignore it for now
+    //NOTE: in theory, the line below could fail if the second parameter is bigger than Int.maxValue
+    //NOTE: however, this won't happen in our scenario, so we ignore it for now
     val num_ranges: Int = math.max(num_local_workers, ((max - min + 1L) / 10000000L).toInt)
     linear_combination_ranges = LinearCombinationWorker.range_split(min, max, num_ranges)
     linear_combination_actors = Array[ActorRef]()
@@ -439,7 +422,7 @@ class SlaveActor extends Actor {
     println("stop_solving_linear_combination called")
     for (actor <- linear_combination_actors) {
       println(s"stopping $actor")
-      context.stop(actor) //TODO good style, or rather PoisonPill?
+      context.stop(actor)
     }
   }
 
@@ -468,8 +451,8 @@ class SlaveActor extends Actor {
   }
 
   def report_hash(student_id: Int, hash: String): Unit = {
-    //TODO: We assume that we do not get 2 HashMiningWorkPackage messages without getting a HashFound message in between
-    //TODO: This should be a valid assumption as long as we control the master, however dunno if its good style
+    //NOTE: We assume that we do not get 2 HashMiningWorkPackage messages without getting a HashFound message in between
+    //NOTE: This should be a valid assumption as long as we control the master, however dunno if its good style
     if (student_id != HashMiningActor.current_student_id) {
       println(s"${this.sender()} found a hash for student with id $student_id. Discarding it as we already found a hash for that id.")
       return
