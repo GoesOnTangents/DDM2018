@@ -222,6 +222,14 @@ class MasterActor extends Actor {
     lcs_students_finished += 1
     if (lcs_students_finished == genes.length) {
       this.t2 = System.currentTimeMillis()
+      for (i <- genes.indices) {
+        val id = i + 1
+        val name = names(i)
+        val password = cracked_passwords(i)
+        val prefix = if (linear_combination(i)) 1 else -1
+        val partner = lcs_partner(i)+1 // +1? Yes. :D
+        println(s"\n$id;$name;$password;$prefix;$partner;")
+      }
       println(s"\n Finished LCS. \n Total time: ${(this.t2-this.t1)}")
       self ! MineHashes
     }
@@ -270,7 +278,7 @@ class MasterActor extends Actor {
       val name = names(i)
       val password = cracked_passwords(i)
       val prefix = if (linear_combination(i)) 1 else -1
-      val partner = lcs_partner(i+1) // +1? Yes. :D
+      val partner = lcs_partner(i)+1 // +1? Yes. :D
       val hash = mined_hashes(i)
       println(s"$id;$name;$password;$prefix;$partner;$hash")
     }
