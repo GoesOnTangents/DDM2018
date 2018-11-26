@@ -10,7 +10,7 @@ import scala.util.control.Breaks.{break, breakable}
 object HashMiningActor {
   final val props: Props = Props(new HashMiningActor())
   final case class Setup(master_actor_adress: String, linear_combination : Array[Boolean], lcs_partner: Array[Int])
-  final case class Start(student_id: Int, range: Tuple2[Int,Int])
+  final case class Start(student_id: Int, range: Tuple2[Long,Long])
 }
 
 class HashMiningActor extends Actor {
@@ -30,7 +30,7 @@ class HashMiningActor extends Actor {
 
   //we consider id's as starting from 0, not 1
   //TODO: do partner ids start with 0 or 1?
-  def mine_hashes(student_id: Int, range: Tuple2[Int,Int]): Unit = {
+  def mine_hashes(student_id: Int, range: Tuple2[Long,Long]): Unit = {
     println(s"${this} started to mine hashes in range ${range._1} to ${range._2}")
 
     val target_prefix = if (linear_combination(student_id)) "11111" else "00000"
@@ -43,7 +43,7 @@ class HashMiningActor extends Actor {
     var hash = ""
     val rand = new scala.util.Random
     while (!hash.startsWith(target_prefix)) {
-      nonce = min + rand.nextInt(max - min + 1)
+      nonce = (min + rand.nextInt((max - min + 1).toInt)).toInt
       hash = PasswordWorker.hash_int(partner_id + nonce)
     }
 
@@ -109,6 +109,42 @@ class LCSWorker extends Actor {
     context.stop(self)
   }
 
+  def longestSubstr(s: String, t: String): Int = {
+    if (s.isEmpty || t.isEmpty) return 0
+    val m = s.length
+    val n = t.length
+    var cost = 0
+    var maxLen = 0
+    var p = new Array[Int](n)
+    var d = new Array[Int](n)
+    var i = 0
+    while ( {
+      i < m
+    }) {
+      var j = 0
+      while ( {
+        j < n
+      }) { // calculate cost/score
+        if (s.charAt(i) != t.charAt(j)) cost = 0
+        else if ((i == 0) || (j == 0)) cost = 1
+        else cost = p(j - 1) + 1
+        d(j) = cost
+        if (cost > maxLen) maxLen = cost
+          // for {}
+        //{
+          j += 1; j
+        //}
+      }
+      val swap = p
+      p = d
+      d = swap
+
+      {
+        i += 1; i
+      }
+    }
+    maxLen
+  }
 
   def lcs(a: String, b: String): Int ={
     /*val start = 20
@@ -116,9 +152,10 @@ class LCSWorker extends Actor {
     val rnd = new scala.util.Random
     start + rnd.nextInt( (end - start) + 1 )
     lcsM(a.toList, b.toList).mkString.length()*/
-    val ret: String = longestCommonSubstring(a,b)
+    val ret = longestSubstr(a,b)
     println(s"$ret")
-    ret.length()
+    //ret.length()
+    ret
   }
 
   def longestCommonSubstring(s: String, t: String): String = {
@@ -236,7 +273,7 @@ object LinearCombinationWorker {
   def range_split(min: Long, max: Long, num_batches: Int): Array[Tuple2[Long,Long]] = {
     var result = Array[Tuple2[Long,Long]]()
 
-    val total_range = max - min + 1L
+    val total_range : Long = max - min + 1L
 
     val range_per_batch : Long = total_range / num_batches
     val additional_stuff_for_first_batch : Long = total_range % num_batches
@@ -515,7 +552,7 @@ class SlaveActor extends Actor {
 
     hash_mining_actors_current_index = student_id
 
-    val hash_mining_ranges : Vector[Tuple2[Int,Int]] = PasswordWorker.range_split(Int.MinValue, Int.MaxValue, num_local_workers)
+    val hash_mining_ranges : Array[Tuple2[Long,Long]] = LinearCombinationWorker.range_split(Int.MinValue + 2, Int.MaxValue - 2, num_local_workers)
     for (i <- hash_mining_actors.indices) {
       hash_mining_actors(i) ! Start(student_id, hash_mining_ranges(i))
     }
