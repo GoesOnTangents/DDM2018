@@ -19,7 +19,7 @@ class HashMiningActor extends Actor {
   import HashMiningActor._
 
   //default
-  var master_actor_address: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  var master_actor_address: String = ""
   var linear_combination : Array[Boolean] = Array[Boolean]()
   var lcs_partner : Array[Int] = Array[Int]()
 
@@ -76,8 +76,8 @@ class LCSWorker extends Actor {
   import LCSWorker._
 
   //default
-  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
-  val masterActor = context.actorSelection(this.masterActorAddress)
+  var masterActorAddress: String = ""
+
   var genes: Array[String] = Array()
 
   override def receive: Receive = {
@@ -97,6 +97,7 @@ class LCSWorker extends Actor {
 
     for (x <- i until j+1) {
       if (genes(student) != genes(candidate)) {
+        val masterActor = context.actorSelection(this.masterActorAddress)
         res = lcs(genes(student), genes(candidate))
         masterActor ! LCSFound(student, candidate, res)
         counter += 1
@@ -186,7 +187,7 @@ class LinearCombinationWorker extends Actor {
   import LinearCombinationWorker._
 
   //default
-  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  var masterActorAddress: String = ""
   var passwords: Array[Int] = Array[Int]()
   var target_sum: Long = -1L
 
@@ -272,7 +273,7 @@ class PasswordWorker() extends Actor {
   import PasswordWorker._
 
   //default
-  var masterActorAddress: String = "akka.tcp://MasterSystem@127.0.0.1:42000/user/MasterActor"
+  var masterActorAddress: String = ""
   def crack_passwords_in_range(passwords: Array[String], i: Int, j: Int) : Unit = {
     val masterActor = context.actorSelection(this.masterActorAddress)
     println(s"$this has started to go through passwords from $i to $j")
