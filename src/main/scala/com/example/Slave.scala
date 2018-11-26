@@ -11,6 +11,8 @@ object HashMiningActor {
   final val props: Props = Props(new HashMiningActor())
   final case class Setup(master_actor_adress: String, linear_combination : Array[Boolean], lcs_partner: Array[Int])
   final case class Start(student_id: Int, range: Tuple2[Long,Long])
+
+  var current_student_id: Int = -1
 }
 
 class HashMiningActor extends Actor {
@@ -42,9 +44,15 @@ class HashMiningActor extends Actor {
     var nonce = 0
     var hash = ""
     val rand = new scala.util.Random
+    var counter = 0
     while (!hash.startsWith(target_prefix)) {
+
       nonce = (min + rand.nextInt((max - min + 1).toInt)).toInt
       hash = PasswordWorker.hash_int(partner_id + nonce)
+      counter += 1
+      if (counter % 100000 == 0) {
+        if (current_student_id != student_id) return
+      }
     }
 
     //password found
@@ -343,7 +351,6 @@ class SlaveActor extends Actor {
   var linear_combination_actors : Array[ActorRef] = Array[ActorRef]()
 
   var hash_mining_actors : Array[ActorRef] = Array[ActorRef]()
-  var hash_mining_actors_current_index = -1 //invalid value
 
   override def receive: Receive = {
     case SetWorkers(num) =>
@@ -452,7 +459,7 @@ class SlaveActor extends Actor {
   def distribute_hash_mining_work_package(student_id: Int) : Unit = {
     import HashMiningActor.Start
 
-    hash_mining_actors_current_index = student_id
+    HashMiningActor.current_student_id = student_id
 
     val hash_mining_ranges : Array[Tuple2[Long,Long]] = LinearCombinationWorker.range_split(Int.MinValue + 2, Int.MaxValue - 2, num_local_workers)
     for (i <- hash_mining_actors.indices) {
@@ -463,13 +470,19 @@ class SlaveActor extends Actor {
   def report_hash(student_id: Int, hash: String): Unit = {
     //TODO: We assume that we do not get 2 HashMiningWorkPackage messages without getting a HashFound message in between
     //TODO: This should be a valid assumption as long as we control the master, however dunno if its good style
-    if (student_id != hash_mining_actors_current_index) {
+    if (student_id != HashMiningActor.current_student_id) {
       println(s"${this.sender()} found a hash for student with id $student_id. Discarding it as we already found a hash for that id.")
       return
     }
 
     val master_actor = context.actorSelection(master_actor_address)
-    hash_mining_actors_current_index = -1 //invalid value, causing second/third etc HashFound messages to be ignored
+    HashMiningActor.current_student_id = -1 //invalid value, causing second/third etc HashFound messages to be ignored
     master_actor ! HashFound(student_id, hash)
+    master_actor ! HashMiningWorkRequest
+  }
+
+  override def postStop(): Unit = {
+    super.postStop()
+    context.system.terminate()
   }
 }

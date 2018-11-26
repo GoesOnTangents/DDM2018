@@ -36,6 +36,7 @@ class MasterActor extends Actor {
   var slaves: Array[ActorRef] = Array()
   var t1: Long = 0
   var t2: Long = 0
+  var t3: Long = 0
 
   //inputs
   var names: Array[String] = Array()
@@ -118,6 +119,7 @@ class MasterActor extends Actor {
   def delegate_password_cracking(): Unit = {
     println("Delegating Passwords to crack.")
     this.t1 = System.currentTimeMillis()
+    this.t3 = System.currentTimeMillis()
     println(s"Started cracking Passwords. t1: ${this.t1}")
     val ranges = PasswordWorker.range_split(100000, 999999, slaves.length)
     for (i <- slaves.indices) {
@@ -129,8 +131,8 @@ class MasterActor extends Actor {
     slaves = slaves :+ sender()
     println(s"Current master's slaves:\n ${slaves.deep.mkString("\n")}")
     if (slaves.length == expectedSlaveAmount) {
-      self ! SolveLCS
-      //self ! CrackPasswords
+      //self ! SolveLCS
+      self ! CrackPasswords
     }
   }
 
@@ -141,6 +143,7 @@ class MasterActor extends Actor {
 
     if (num_cracked_passwords == cracked_passwords.length) {
       this.t2 = System.currentTimeMillis()
+      println(s"Time for last op: ${t2-t3}")
       println(s"\nCracked Passwords:\n ${cracked_passwords.deep.mkString(",")},\n Total time needed: ${(this.t2-this.t1)}")
       self ! SolveLinearCombination
     }
@@ -150,7 +153,7 @@ class MasterActor extends Actor {
   //as we use Long (64 bit) as a bitmask to encode which passwords are part of the linear combination
   def delegate_linear_combination(): Unit = {
     println("Delegating linear combinations to test.")
-
+    t3 = System.currentTimeMillis()
     //we assume that the sum is always an even number and we thus can divide by 2 - otherwise a partition cannot exist anyway
     val target_sum: Long = cracked_passwords.sum / 2
     println(s"total sum is ${2*target_sum}, so we look for $target_sum as sum")
@@ -192,11 +195,13 @@ class MasterActor extends Actor {
     this.t2 = System.currentTimeMillis()
     println(s"sum is $sum.\nTotal time taken: ${(this.t2-this.t1)}")
     linear_combination_found = true
+    println(s"Time for last op: ${t2-t3}")
     self ! SolveLCS
   }
 
   def delegate_lcs(): Unit = {
     val total_lcs_comparisons = this.names.length*this.names.length
+    t3 = System.currentTimeMillis()
     println(s"Length of our list is: ${this.names.length} squared: $total_lcs_comparisons.\n")
     val ranges = PasswordWorker.range_split(0, total_lcs_comparisons, slaves.length)
     for (i<- slaves.indices) {
@@ -222,21 +227,15 @@ class MasterActor extends Actor {
     lcs_students_finished += 1
     if (lcs_students_finished == genes.length) {
       this.t2 = System.currentTimeMillis()
-      for (i <- genes.indices) {
-        val id = i + 1
-        val name = names(i)
-        val password = cracked_passwords(i)
-        val prefix = if (linear_combination(i)) 1 else -1
-        val partner = lcs_partner(i)+1 // +1? Yes. :D
-        println(s"\n$id;$name;$password;$prefix;$partner;")
-      }
       println(s"\n Finished LCS. \n Total time: ${(this.t2-this.t1)}")
+      println(s"Time for last op: ${t2-t3}")
       self ! MineHashes
     }
   }
   
   def delegate_hash_mining() : Unit = {
     println("Delegating hash mining.")
+    t3 = System.currentTimeMillis()
     for (slave <- slaves) {
       slave ! SlaveActor.MineHashes(linear_combination, lcs_partner)
     }
@@ -263,14 +262,14 @@ class MasterActor extends Actor {
         println(s"sending poison pill to $slave")
         slave ! PoisonPill
       }
-
-      println("Starting output phase")
+      println(s"Time for last op: ${t2-t3}")
       self ! OutputResults
     }
   }
 
   def print_results(): Unit = {
     println(s"After ${(this.t2-this.t1)} milliseconds, these are the results:")
+    println("ID;Name;Password;Prefix;Partner;Hash")
     for (i <- genes.indices) {
       val id = i + 1
       val name = names(i)
@@ -281,5 +280,6 @@ class MasterActor extends Actor {
       println(s"$id;$name;$password;$prefix;$partner;$hash")
     }
     println("Printing results completed. Have a nice day.")
+    context.system.terminate()
   }
 }
