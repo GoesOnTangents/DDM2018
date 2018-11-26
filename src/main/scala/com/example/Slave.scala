@@ -116,7 +116,37 @@ class LCSWorker extends Actor {
     val rnd = new scala.util.Random
     start + rnd.nextInt( (end - start) + 1 )
     lcsM(a.toList, b.toList).mkString.length()*/
-    lcs_dp(a,b).length()
+    val ret: String = longestCommonSubstring(a,b)
+    println(s"$ret")
+    ret.length()
+  }
+
+  def longestCommonSubstring(s: String, t: String): String = {
+    import scala.annotation.tailrec
+    val p = (s.length, t.length)
+    val nonEmpty = s.nonEmpty && t.nonEmpty
+
+    @tailrec
+    def iter(lcSufx: Map[(Int, Int), Int], indexes: (Int, Int), z: Int): Map[(Int, Int), Int] = {
+      val (i, j) = indexes
+
+      def newIndexes: (Int, Int) = if (j == p._2) (i + 1, 1) else (i, j + 1)
+
+      if (indexes != p && nonEmpty)
+        if (s(i - 1) == t(j - 1)) {
+          val count = lcSufx.withDefaultValue(0)((i - 1, j - 1)) + 1
+
+          @inline
+          def newLcSufx = lcSufx.filter(_._2 >= z).updated(indexes, count)
+
+          iter(newLcSufx, newIndexes, if (count >= z) count else z)
+        } else iter(lcSufx, newIndexes, z)
+      else lcSufx.filter(_._2 > 1)
+    }
+
+    iter(Map.empty[(Int, Int), Int], (1, 1), 0).map {
+      case ((i, _), z) => s.substring(i - z, i)
+    }.toSeq.mkString
   }
 
   def lcs_dp(s1: String, s2: String): String = {

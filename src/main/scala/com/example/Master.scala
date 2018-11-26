@@ -122,7 +122,8 @@ class MasterActor extends Actor {
     slaves = slaves :+ sender()
     println(s"Current master's slaves:\n ${slaves.deep.mkString("\n")}")
     if (slaves.length == expectedSlaveAmount) {
-      self ! CrackPasswords
+      self ! SolveLCS
+      //self ! CrackPasswords
     }
   }
 
