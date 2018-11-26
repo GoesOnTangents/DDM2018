@@ -9,6 +9,7 @@ import scala.util.control.Breaks.{break, breakable}
 object MasterActor {
   final val props: Props = Props(new MasterActor())
   final case class Read(filename: String)
+  final case class SetSlaves(slaves: Int)
 
   final case object SlaveSubscription
 
@@ -77,6 +78,10 @@ class MasterActor extends Actor {
     mined_hashes = Array.ofDim(num_lines)
   }
 
+  def set_slave_amount(num: Int): Unit ={
+    this.expectedSlaveAmount = num
+  }
+
   override def receive: Receive = {
     case SlaveSubscription =>
       this.subscribe_slaves()
@@ -102,6 +107,8 @@ class MasterActor extends Actor {
       this.store_hash(id, hash)
     case Read(filename) =>
       this.read(filename)
+    case SetSlaves(slaves) =>
+      this.set_slave_amount(slaves)
     case OutputResults =>
       this.print_results
     case msg: Any => throw new RuntimeException("unknown message type " + msg);

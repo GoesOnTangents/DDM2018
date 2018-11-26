@@ -379,6 +379,7 @@ class PasswordWorker() extends Actor {
 object SlaveActor {
   final val props: Props = Props(new SlaveActor())
 
+  final case class SetWorkers(num: Int)
   final case class Subscribe(addr: String)
   final case class FindLCSInRange(genes: Array[String], i: Int , j: Int)
 
@@ -391,13 +392,12 @@ object SlaveActor {
   final case class MineHashes(linear_combination: Array[Boolean], lcs_partner: Array[Int])
   final case class HashMiningWorkPackage(student_id: Int)
   final case class HashFound(student_id: Int, hash: String)
-
-  final val num_local_workers = 2 //TODO: dont hardcode
 }
 
 class SlaveActor extends Actor {
   import SlaveActor._
   var master_actor_address: String = ""
+  var num_local_workers = 2
 
   var linear_combination_ranges : Array[Tuple2[Long,Long]] = Array[Tuple2[Long,Long]]()
   var linear_combination_next_index = 0
@@ -407,6 +407,8 @@ class SlaveActor extends Actor {
   var hash_mining_actors_current_index = -1 //invalid value
 
   override def receive: Receive = {
+    case SetWorkers(num) =>
+      this.set_worker_amount(num)
     case Subscribe(addr) =>
       this.subscribe(addr)
     case CrackPasswordsInRange(passwords, i, j) =>
@@ -427,6 +429,9 @@ class SlaveActor extends Actor {
       this.report_hash(id, hash)
   }
 
+  def set_worker_amount(i: Int): Unit ={
+    this.num_local_workers = i
+  }
   def subscribe(addr: String) = {
     this.master_actor_address = addr
     val selection = context.actorSelection(addr)

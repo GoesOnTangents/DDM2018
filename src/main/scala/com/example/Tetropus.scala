@@ -4,8 +4,8 @@ import java.io.File
 
 import com.example._
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
-import com.example.MasterActor.Read
-import com.example.SlaveActor.Subscribe
+import com.example.MasterActor.{Read, SetSlaves}
+import com.example.SlaveActor.{SetWorkers, Subscribe}
 import com.typesafe.config.ConfigFactory
 
 object Tetropus extends App {
@@ -26,6 +26,7 @@ object Tetropus extends App {
 
     val masterActor: ActorRef = system.actorOf(MasterActor.props, "MasterActor")
     masterActor ! Read(args(6))
+    masterActor ! SetSlaves(args(4).toInt)
   }
 
   def invoke_slave: Unit ={
@@ -33,6 +34,7 @@ object Tetropus extends App {
     val system: ActorSystem = ActorSystem("SlaveSystem", config)
     val slaveActor: ActorRef = system.actorOf(SlaveActor.props, "SlaveActor")
     val masterActorAddress: String = s"akka.tcp://MasterSystem@${args(4)}:42000/user/MasterActor"
+    slaveActor ! SetWorkers(args(2).toInt)
     slaveActor ! Subscribe(masterActorAddress)
   }
 
