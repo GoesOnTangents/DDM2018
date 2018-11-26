@@ -234,9 +234,7 @@ class MasterActor extends Actor {
       self ! MineHashes
     }
   }
-
-
-
+  
   def delegate_hash_mining() : Unit = {
     println("Delegating hash mining.")
     for (slave <- slaves) {
